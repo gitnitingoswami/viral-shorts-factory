@@ -7,7 +7,7 @@ All figures are **estimates in USD** with explicit assumptions. Prices change; t
 ## 1. Volume assumptions
 | Assumption | Low | Expected | High |
 |---|---|---|---|
-| Published Shorts per month | 8 | 16 | 30 |
+| Published Shorts per month | 8 | 16 | 20 (hard cap: 5/week) |
 | Scripts drafted per published Short (incl. rejected) | 1.5 | 2 | 3 |
 | Re-renders per published Short | 1 | 2 | 3 |
 | Weekly research runs per month | 4 | 4 | 8 |
@@ -40,8 +40,8 @@ Weekly research synthesis: ~150k in / 20k out ≈ **$1.00/run**, or ≈ $0.50 wi
 ## 4. Monthly operating cost
 | Category | Low | Expected | High | Notes |
 |---|---|---|---|---|
-| LLM (Claude) | $7 | $27 | $98 | Volume × per-Short range ($0.60 / $1.45 / $3.00) + research runs ($0.50 / $1 / $1) |
-| TTS | $0.20 | $1 | $3 | ~1,000 chars × renders; free tiers may make this $0 |
+| LLM (Claude) | $7 | $27 | $68 | Volume × per-Short range ($0.60 / $1.45 / $3.00) + research runs ($0.50 / $1 / $1) |
+| TTS | $0.20 | $1 | $2 | ~1,000 chars × renders; free tiers may make this $0 |
 | Image generation (optional) | $0 | $0 | $15 | Off by default; code visuals are self-rendered |
 | Code sandbox / rendering compute | $0 | $0 | $0 | Runs on the same host |
 | Hosting – local dev only | $0 | — | — | Phases 01–08 can run on the operator's Mac |
@@ -49,12 +49,12 @@ Weekly research synthesis: ~150k in / 20k out ≈ **$1.00/run**, or ≈ $0.50 wi
 | Object storage + backups | $0.50 | $2 | $5 | Renders ~50–150 MB each; old renders pruned |
 | Managed Postgres (optional later) | $0 | $0 | $50 | Not needed for MVP |
 | Domain + TLS | $0 | $1 | $2 | Let's Encrypt |
-| **Total (local hosting)** | **≈ $8** | **≈ $31** | **≈ $123** | |
-| **Total (cloud hosting)** | **≈ $23** | **≈ $66** | **≈ $233** | |
+| **Total (local hosting)** | **≈ $8** | **≈ $31** | **≈ $92** | |
+| **Total (cloud hosting)** | **≈ $23** | **≈ $66** | **≈ $202** | |
 
 ## 5. Against the approved $100/month guard
-- The guard applies to **variable AI/TTS/media spend** (LLM + TTS + image). Expected ≈ **$28/month**; the high case (≈ $116) would trip the guard in a 30-video month, which is the intended behavior.
-- Hosting is a fixed cost tracked separately (Phase 07 budget scope `hosting`).
+- The guard applies to **variable AI/TTS/media spend** (LLM + TTS + image). Expected ≈ **$28/month**; the high case (≈ $85) stays under the guard. The guard trips only on unexpected spend (runaway retries, many rejected drafts), which is its purpose.
+- Hosting is a fixed cost tracked separately (budget `scope=category`, `category=hosting`).
 - Levers if spend runs high (operator decision; not applied by default): prompt caching (already planned), Batch API for research, `effort: low` for classification, switching non-script tasks to Sonnet 5.5 or Haiku 5.5.
 
 ## 6. One-off / setup costs

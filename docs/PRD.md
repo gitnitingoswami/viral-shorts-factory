@@ -11,6 +11,11 @@ The human gives the creative direction and approves every script and every uploa
 The name "Viral Shorts Factory" is an internal project name. The product makes no promise of
 virality, views, or revenue (see §9).
 
+## 1a. Workspace inspection (2026-11-14)
+- **Existing code:** none. The workspace contained only orchestration instructions (`CLAUDE.md`, `APPROVAL_POLICY.md`), 12 specialist agent files, 3 commands, 1 skill, templates, and 10 phase prompts.
+- **Conventions inherited:** from `CLAUDE.md` / `docs/engineering-standards/`: strict TypeScript, NestJS/Angular/PostgreSQL/TypeORM/Redis stack, migrations for every schema change, idempotent jobs, no secrets in Git, feature branches, no force-push.
+- **Constraints found:** Git was not initialized (now initialized, remote `gitnitingoswami/desktop-tutorial`, branch `phase-00/product-discovery`; the remote `main` has unrelated history). FFmpeg is not installed. The Docker daemon is not running. No YouTube/Gmail integration is connected. `gh` CLI config is root-owned. Duplicate agent roles exist (`*-engineer` used as primary).
+
 ## 2. Approved decisions (2026-11-14)
 | Decision | Value |
 |---|---|
@@ -69,7 +74,7 @@ AI image/video generation stays an optional, provider-abstracted add-on (for exa
 | M5 | Production: code-frame renderer, TTS, captions, FFmpeg composition, quality report, preview | 04 |
 | M6 | YouTube OAuth connection, publishing queue, approval gate, private/scheduled upload, duplicate prevention | 05 |
 | M7 | Metric snapshots from YouTube Data + Analytics APIs, dashboards, evidence-linked insights | 06 |
-| M8 | Cost ledger per provider/video, monthly budget guard that pauses billable jobs | 04–07 (ledger from 03) |
+| M8 | Cost ledger per provider/video, monthly budget guard that pauses billable jobs | Ledger + guard in 02 (before the first billable call); finance views in 07 |
 | M9 | Audit log of every external action and approval | 01 onward |
 
 Phases 07–09 add finance views, full orchestration with bounded autopilot (off by default), and production hardening.
@@ -87,7 +92,7 @@ Phases 07–09 add finance views, full orchestration with bounded autopilot (off
 ## 8. Functional requirements (summary)
 Full acceptance criteria per phase are in `DEVELOPMENT_ROADMAP.md`.
 - **FR-1 Research:** each trend topic stores source, URL, retrieval timestamp, raw metric values, and a score breakdown. Missing metrics are shown as missing, never imputed silently.
-- **FR-2 Ideas:** exactly 5 distinct ideas per approved topic. Near-duplicates of past ideas (embedding or title similarity above a threshold) are flagged.
+- **FR-2 Ideas:** exactly 5 distinct ideas per approved topic. Near-duplicates of past ideas (`pg_trgm` text similarity above a threshold) are flagged.
 - **FR-3 Scripts:** 20–60 s target (YouTube allows up to 3 min). Scene list with narration, on-screen code/text, duration, and transition. Every version is kept.
 - **FR-4 Verification:** code snippets are executed or type-checked in an isolated sandbox. Factual claims are linked to sources or flagged "unsupported". Unsupported claims block approval unless the operator overrides with a reason.
 - **FR-5 Production:** 1080×1920, configurable fps/codec/bitrate. Burned-in captions plus an SRT file. Every asset has provenance and license metadata.

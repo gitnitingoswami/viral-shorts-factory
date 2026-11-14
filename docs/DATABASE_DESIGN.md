@@ -18,13 +18,30 @@
 |---|---|---|
 | 1 | Identity & workspace | `workspace`, `user_account`, `refresh_session` |
 | 2 | Channels & integrations | `channel`, `connected_account`, `oauth_token` |
-| 3 | Niches & research | `niche`, `research_source`, `trend_collection`, `raw_signal`, `trend_topic`, `trend_topic_signal`, `trend_metric`, `weekly_trend_report` |
+| 3 | Niches & research | `niche`, `content_strategy`, `research_source`, `trend_collection`, `raw_signal`, `trend_topic`, `trend_topic_signal`, `trend_metric`, `weekly_trend_report` |
 | 4 | Ideas, scripts, review | `content_idea`, `video_script`, `script_version`, `storyboard_scene`, `script_claim`, `code_verification`, `script_review` |
-| 5 | Media & production | `media_asset`, `voice_profile`, `video_production`, `render_job`, `video_version`, `quality_report` |
-| 6 | Publishing | `publishing_job`, `upload_attempt`, `published_content`, `publishing_log` |
+| 5 | Media & production | `media_asset`, `production_asset` (join), `voice_profile`, `video_production`, `video_scene`, `render_job`, `video_version`, `quality_report` |
+| 6 | Publishing | `publishing_schedule`, `publishing_job`, `upload_attempt`, `published_content`, `publishing_log` |
 | 7 | Analytics | `video_metric_snapshot`, `channel_metric_snapshot`, `performance_report`, `performance_insight`, `content_experiment` |
-| 8 | Finance | `expense_record`, `revenue_record`, `budget`, `monetization_status` |
+| 8 | Finance | `expense_record`, `revenue_record`, `budget`, `monetization_status`, `affiliate_campaign`, `campaign_performance`, `financial_report` |
 | 9 | Workflow & audit | `workflow_run`, `workflow_transition`, `job`, `approval`, `audit_event`, `notification` |
+
+### 2a. Mapping of the phase prompts' suggested entities
+| Suggested entity (phase) | Table | Note |
+|---|---|---|
+| ResearchSource, Niche, TrendCollection, TrendTopic, TrendMetric, WeeklyTrendReport (02) | Same names, snake_case | Direct |
+| ContentIdea, VideoScript, ScriptVersion, StoryboardScene, ScriptReview (03) | Same names | Direct |
+| ContentStrategy (03) | `content_strategy` | Per niche: audience, tone, content pillars, cadence, style guide ref |
+| Storyboard (03) | Merged into `script_version` | A storyboard is the ordered set of `storyboard_scene` rows of one immutable script version |
+| MediaAsset, VoiceProfile, VideoProduction, RenderJob, VideoVersion, QualityReport (04) | Same names | Direct |
+| VideoScene (04) | `video_scene` | Production-level scene: final timings, asset refs, caption timings |
+| GeneratedAudio, GeneratedVisual (04) | Merged into `media_asset` (`kind`=audio/image/code_frame, `generated`=true) linked via `production_asset` | One rights/provenance model for all assets |
+| ConnectedSocialAccount (05) | `connected_account` | Direct |
+| PublishingSchedule (05) | `publishing_schedule` | Channel posting slots, timezone, default privacy |
+| PublishingJob, UploadAttempt, PublishedContent, PublishingLog (05) | Same names | Direct |
+| VideoMetricSnapshot, ChannelMetricSnapshot, PerformanceReport, ContentExperiment, PerformanceInsight (06) | Same names | Direct |
+| RevenueRecord, ExpenseRecord, Budget, MonetizationStatus, FinancialReport (07) | Same names | Direct |
+| AffiliateCampaign, CampaignPerformance (07) | `affiliate_campaign`, `campaign_performance` | Manually configured only; defined in detail in Phase 07 |
 
 ## 3. ERD (first pass)
 ```mermaid
@@ -57,7 +74,11 @@ erDiagram
   video_production ||--o{ render_job : runs
   video_production ||--o{ video_version : outputs
   video_version ||--o| quality_report : checked
-  media_asset }o--o{ video_production : "used in"
+  media_asset ||--o{ production_asset : "used as"
+  video_production ||--o{ production_asset : uses
+  video_production ||--o{ video_scene : "composed of"
+  niche ||--o| content_strategy : "guided by"
+  channel ||--o{ publishing_schedule : "posts on"
   voice_profile ||--o{ video_production : narrates
 
   video_version ||--o{ publishing_job : scheduled
@@ -84,33 +105,35 @@ erDiagram
 | `raw_signal` | source_id, collection_id, external_id, url, title, metrics jsonb, retrieved_at, content_hash | unique(source_id, external_id, collection_id); index(content_hash) |
 | `trend_topic` | collection_id, canonical_title, slug, score numeric(5,4), score_breakdown jsonb, confidence, missing_components text[], status (new/approved/rejected) | unique(collection_id, slug) |
 | `trend_metric` | topic_id, name, value numeric, unit, source_id, observed_at, retrieved_at | Every metric row has a source and timestamps (provenance) |
-| `content_idea` | topic_id, title, hook, angle, audience, value_prop, format, target_duration_s, source_refs jsonb, embedding vector(1024)?, similarity_flag | index ivfflat(embedding) once pgvector is enabled |
+| `content_idea` | topic_id, title, hook, angle, audience, value_prop, format, target_duration_s, source_refs jsonb, similarity_score, similarity_flag | GIN `pg_trgm` index on title+hook for duplicate detection (embeddings are optional later) |
 | `script_version` | script_id, version int, author_type (ai/human), llm_prompt_ref, llm_model, body jsonb, word_count, est_duration_s, status | unique(script_id, version); versions immutable after creation |
 | `script_claim` | script_version_id, text, source_ref, verdict (supported/unsupported/contradicted/overridden), evidence, override_reason | |
 | `code_verification` | scene_id, language, code_hash, result (pass/fail/error), stdout, stderr, runtime_ms | |
-| `media_asset` | kind (image/audio/font/music/code_frame/video), storage_key, sha256, mime, bytes, **source**, **creator_or_provider**, **license**, **license_url**, **usage_rights**, generation_params jsonb, provenance jsonb | unique(sha256, kind); license NOT NULL |
+| `media_asset` | kind (image/audio/font/music/code_frame/video), generated bool, storage_key, sha256, mime, bytes, **source**, **creator_or_provider**, **license**, **license_url**, **usage_rights**, generation_params jsonb, provenance jsonb | unique(sha256, kind); license NOT NULL |
 | `video_version` | production_id, version, storage_key, sha256, width, height, fps, duration_ms, codec, bitrate, captions_key | unique(production_id, version) |
 | `quality_report` | video_version_id, checks jsonb, passed bool, failures text[] | |
-| `publishing_job` | video_version_id, channel_id, privacy (private/unlisted/public), publish_at, title, description, tags, contains_synthetic_media, made_for_kids, approval_id, status, idempotency_marker | **unique(video_version_id, channel_id)**; approval_id NOT NULL before status ≥ 'approved' |
+| `publishing_job` | video_version_id, channel_id, privacy (private/unlisted/public), publish_at, title, description, tags, contains_synthetic_media, made_for_kids, **approval_hash**, approval_id, public_approval_id, status, idempotency_marker | **unique(video_version_id, channel_id)**; approval_id NOT NULL before status ≥ 'approved'; **`public_approval_id` NOT NULL when `privacy='public'` OR `publish_at IS NOT NULL`** |
 | `upload_attempt` | publishing_job_id, attempt_no, state (started/succeeded/failed/unknown), remote_video_id, request_hash, response_summary, started_at, finished_at | unique(publishing_job_id, attempt_no) |
 | `published_content` | publishing_job_id, remote_video_id, url, remote_privacy, upload_status, verified_at | **unique(remote_video_id)**; unique(publishing_job_id) |
 | `video_metric_snapshot` | published_content_id, metric, value, window_start, window_end, source_api, fetched_at, is_estimated, is_delayed | unique(published_content_id, metric, window_start, window_end, fetched_at) |
 | `expense_record` | provider, category (llm/tts/image/render/storage/hosting/other), units, unit, unit_price_version, amount_minor, currency, related_type, related_id, job_id, occurred_at | index(occurred_at), index(provider) |
 | `revenue_record` | source (youtube_import/affiliate/sponsorship/manual), amount_minor, currency, period_start, period_end, is_estimated, evidence_ref | |
-| `budget` | scope (global/provider/video), period (day/week/month), limit_minor, currency, warn_pct, action ('pause') | |
+| `budget` | scope (global/provider/category/video), category (llm/tts/image/render/storage/hosting/other, nullable), period (day/week/month), limit_minor, currency, warn_pct, action ('pause') | |
 | `job` | type, queue, idempotency_key, status, attempt, max_attempts, progress, input jsonb, output_ref, error jsonb, correlation_id, lease_until, workflow_run_id | **unique(idempotency_key)**; index(status, queue) |
-| `approval` | subject_type, subject_id, subject_version_hash, decision, decided_by, note, decided_at | Approval is bound to the exact content hash; any edit invalidates it |
+| `approval` | subject_type (script_version / publish_private / publish_public), subject_id, subject_version_hash, decision, decided_by, note, decided_at | Bound to the exact hash (see §5); any edit invalidates it. `publish_public` approvals require role `owner` |
 | `audit_event` | occurred_at, actor_type (user/system/worker), actor_id, action, subject_type, subject_id, correlation_id, ip, details jsonb (redacted) | Append-only; BRIN(occurred_at) |
 
 ## 5. Integrity rules enforced in the DB
-- No publishing job can reach `approved`/`uploading` without an `approval` row whose `subject_version_hash` matches the video version's sha256 (enforced by service + check trigger).
+- **Publish approval hash** = SHA-256 of the canonical JSON of {video sha256, channel_id, privacy, publish_at, title, description, tags, contains_synthetic_media, made_for_kids}. It is stored on `publishing_job.approval_hash`. Any metadata change recomputes the hash and invalidates the approvals.
+- No publishing job can reach `approved`/`uploading` without an `approval` (`publish_private`) whose `subject_version_hash` equals the current `approval_hash`. Jobs that are public or scheduled (`publish_at` set, which makes the video public automatically) also need a `publish_public` approval by an `owner` with the same hash. Enforced by service + check trigger, and the publish worker recomputes the hash immediately before calling the API.
+- Script approvals hash the immutable `script_version.body`.
 - `published_content.remote_video_id` is unique, so a recorded duplicate upload is impossible.
 - `media_asset.license` is NOT NULL, so an asset without rights metadata cannot be stored.
 - `trend_metric.source_id`, `observed_at`, and `retrieved_at` are NOT NULL, so no metric lacks provenance.
 - `script_version` rows are immutable (an update trigger rejects changes to `body` after insert).
 
 ## 6. Retention and privacy
-- Raw provider payloads (`raw` jsonb) are kept 90 days, then nulled by a maintenance job.
+- Raw provider payloads (`raw` jsonb) are kept 90 days, then nulled by a maintenance job, **except data obtained from YouTube API Services about other channels' content, which is refreshed or deleted within 30 days** per the YouTube API Services Developer Policies (to be re-verified in Phase 02). Derived aggregate scores are kept.
 - Audit events are kept ≥ 1 year.
 - OAuth tokens are deleted on disconnect, and revocation is also called at Google.
 - No end-viewer personal data is stored (analytics are aggregate only).

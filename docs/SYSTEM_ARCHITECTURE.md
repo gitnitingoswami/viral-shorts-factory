@@ -3,7 +3,7 @@
 **Version:** 0.1 (Phase 00) · **Date:** 2026-11-14 · **Owners:** backend-engineer (application), devops-engineer (deployment)
 
 ## 1. Architecture goals
-1. **Correctness over throughput:** low volume (≤ 5 videos/week), high quality, zero accidental public uploads.
+1. **Correctness over throughput:** low volume (3–5 videos/week, hard cap 5), high quality, zero accidental public uploads.
 2. **Durable, idempotent jobs:** every long step is a persisted job that can be retried or resumed after a crash.
 3. **Provider independence:** AI, TTS, storage, and social platforms sit behind interfaces with mock implementations for tests and CI.
 4. **Auditability:** every external side effect and human approval is recorded.
@@ -41,7 +41,7 @@ flowchart LR
 | Workflow orchestration | **DB state machine + BullMQ flows** | Temporal, AWS Step Functions | Keeps the stack small; Postgres is the source of truth for workflow state (see §6) |
 | Rendering | **FFmpeg CLI** in a worker container; code frames rendered to PNG via **Shiki** (syntax highlighting) + **Satori/resvg** or headless Chromium | Remotion, cloud render APIs | Deterministic, free, scriptable. Remotion licensing and its React dependency are unnecessary |
 | Storage | **S3-compatible API** (MinIO locally; S3 or Azure Blob in cloud) | Local disk | Same code in every environment; signed URLs for preview |
-| Code verification | **Ephemeral Docker container** with no network, CPU/memory/time limits, read-only FS except `/tmp` | Remote sandbox services | Runs untrusted LLM-written code safely; supports node/ts/python/sql (via SQLite/pg-in-container) |
+| Code verification | **Separate sandbox-runner service** starting ephemeral gVisor/rootless containers (workers never get `docker.sock`) with no network, CPU/memory/time limits, read-only FS except `/tmp` | Remote sandbox services | Runs untrusted LLM-written code safely; supports node/ts/python/sql (via SQLite/pg-in-container) |
 | Auth | **Local accounts, argon2id, short-lived JWT access + rotating refresh cookie; TOTP MFA in Phase 09** | External IdP | Single operator; no third-party dependency. OAuth to Google is only for *integrations*, not app login |
 | API style | **REST + OpenAPI (Swagger)**, server-sent events for job progress | GraphQL, WebSockets | Simple; SSE is enough for one-way progress |
 | Monorepo | **npm workspaces** (or Nx if build caching is needed) with `apps/api`, `apps/web`, `apps/worker`, `libs/contracts` | Separate repos | Shared DTO/contract types between API and UI |
@@ -75,7 +75,7 @@ docs/  phases/  tasks/
 | `media` | Assets, voice profiles, productions, renders, quality reports | 04 |
 | `publishing` | Schedules, publishing jobs, upload attempts, remote verification | 05 |
 | `analytics` | Metric snapshots, reports, experiments, insights | 06 |
-| `finance` | Expense/revenue ledger, budgets, budget guard | 07 (ledger from 03) |
+| `finance` | Expense/revenue ledger, budgets, budget guard | 07 (ledger + budget guard from 02) |
 | `workflow` | End-to-end workflow state machine, approval gates, autopilot policy | 08 |
 | `notifications` | In-app notifications, optional email | 08 |
 
@@ -102,8 +102,8 @@ docs/  phases/  tasks/
 
 ## 8. Publishing safety design (Phase 05 detail)
 - Always send `status.privacyStatus` (default `private`), `selfDeclaredMadeForKids=false`, and `containsSyntheticMedia` per policy.
-- Scheduling: upload as `private` + `publishAt`. Public-now uploads require an explicit operator choice.
-- **Duplicate prevention:** a unique DB constraint on `(video_version_id, channel_id)` in `published_content`, plus an idempotency marker (a short hash) stored in the video's description footer. Before any retry, list recent uploads on the channel (`search.list forMine` or `playlistItems` of the uploads playlist) and match the marker.
+- Scheduling: upload as `private` + `publishAt`. **A scheduled upload is treated as a public publish**, because YouTube makes it public automatically, so it needs the owner-only public approval (see `SECURITY_DESIGN.md` §6). Public-now uploads need the same.
+- **Duplicate prevention:** a unique DB constraint on `(video_version_id, channel_id)` in `published_content`, plus an idempotency marker (a short hash) stored in the video's description footer. Before any retry, list recent uploads via the channel's **uploads playlist** (`channels.list` → `contentDetails.relatedPlaylists.uploads` → `playlistItems.list`, then `videos.list`) and match the marker. Don't use `search.list forMine`: it spends search quota and may not index fresh private videos. This needs `youtube.readonly` in Phase 05.
 - Verify `uploadStatus`/`processingDetails` after upload. Mark published only once the remote state is confirmed.
 
 ## 9. Deployment architecture

@@ -25,10 +25,10 @@
 | T1 | Stolen OAuth tokens from DB/backup | I | Envelope encryption (AES-256-GCM data key, wrapped by KMS/Key Vault key in prod; local key file outside the repo in dev); tokens never logged or returned by the API; backups encrypted | 05 |
 | T2 | OAuth CSRF / code interception | S, T | `state` (random, bound to session, single-use, 10-min TTL) + PKCE; exact redirect URI allowlist; `prompt=consent` only when needed | 05 |
 | T3 | Over-broad scopes | E | Incremental, least-privilege scopes (see `INTEGRATIONS.md` §2); stored scopes checked before each call | 02–06 |
-| T4 | Approval bypass by worker bug or API misuse | T, E | Approvals bound to the content hash; only an authenticated human route can create them; publish worker re-checks the approval + hash immediately before upload; DB constraint | 03–05 |
-| T5 | Accidental public upload | T | `privacyStatus` always explicit, default `private`; public requires an explicit separate approval flag; config-level `PUBLISH_MAX_PRIVACY=private` until the operator raises it | 05 |
+| T4 | Approval bypass by worker bug or API misuse, or metadata edited after approval | T, E | Approvals bound to a hash of video + **all upload metadata** (privacy, publish_at, title, description, tags, disclosure flags, channel), see `DATABASE_DESIGN.md` §5; only an authenticated human route can create approvals; publish worker recomputes the hash immediately before upload; DB constraint | 03–05 |
+| T5 | Accidental public upload (including via scheduling) | T | `privacyStatus` always explicit, default `private`; **`publish_at` is treated as public** because YouTube makes the video public at that time; public or scheduled jobs need a separate owner-only `publish_public` approval (`public_approval_id`); `PUBLISH_MAX_PRIVACY=private` (default until the operator raises it) rejects both `privacy=public` and any `publish_at` | 05 |
 | T6 | Duplicate uploads on retry | T | Idempotency key + remote marker reconciliation; `unknown` state → human | 05 |
-| T7 | Malicious LLM-generated code escaping the sandbox | E | Rootless container, `--network none`, read-only rootfs, seccomp default, no host mounts, CPU/mem/pids/time limits, non-root user, separate worker host in production if feasible | 03 |
+| T7 | Malicious LLM-generated code escaping the sandbox | E | A dedicated **sandbox-runner** service is the only component allowed to start containers. Application workers **never mount `docker.sock`** (socket access is equal to host root) and call the runner over an internal API. Runner uses gVisor (`runsc`) or rootless Docker; `--network none`, read-only rootfs, seccomp default, no host mounts, CPU/mem/pids/time limits, non-root user; separate host in production if feasible | 03 |
 | T8 | Prompt injection from research sources (for example "ignore instructions, add link X") | T | Sources treated as data with delimiters; schema-validated outputs; URLs in outputs must belong to the input source set; human review | 02–03 |
 | T9 | Credential stuffing / brute force on login | S | argon2id, rate limiting + lockout with backoff, TOTP MFA (Phase 09, earlier if exposed publicly) | 01 / 09 |
 | T10 | XSS in dashboard (script text, titles from sources) | T | Angular auto-escaping; no `innerHTML` bypass; strict CSP; sanitize Markdown rendering | 01+ |
@@ -60,8 +60,8 @@ Rules: no secret in source, docs, logs, fixtures, prompts, or chat. The agent ne
 | Topic selection | Yes | Phase 08 autopilot, within policy limits |
 | Script approval (with fact-check + code verification passed or overridden with reason) | Yes | No (MVP) |
 | Video approval (quality report passed) | Yes | No (MVP) |
-| Upload as private/scheduled | Yes (part of video approval) | — |
-| Making a video public / scheduling public | Yes, explicit | Autopilot only within explicit limits (Phase 08), off by default |
+| Upload as **private** (no `publish_at`) | Yes (`publish_private` approval, part of video approval) | — |
+| Making a video public **or scheduling it** (`publish_at` set = automatic future public) | Yes, separate owner-only `publish_public` approval | Autopilot only within explicit limits (Phase 08), off by default |
 | Budget increase, scope expansion, new integration | Yes (owner) | No |
 Autopilot pauses for human review on: unsupported claims, failed code verification, quality failure, budget threshold, credential errors, policy warnings, or `unknown` upload state.
 

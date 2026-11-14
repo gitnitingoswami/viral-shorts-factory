@@ -7,7 +7,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | ID | Task | Owner | Status | Notes |
 |---|---|---|---|---|
 | S.1 | Initialize Git repo, add remote | Lead Orchestrator | DONE | Local repo on `main` (c4cddaf); remote `origin` = gitnitingoswami/desktop-tutorial; working branch `phase-00/product-discovery` |
-| S.1b | Push access to GitHub remote | User | BLOCKED | HTTPS: stored credential invalid; SSH: key `~/.ssh/id_rsa` not registered with GitHub |
+| S.1b | Push access to GitHub remote | User | DONE | HTTPS works via VS Code credentials (2026-11-14); SSH key still not registered |
 | S.2 | Fix `~/.config/gh` ownership (root-owned) and authenticate `gh` | User | BLOCKED | `sudo chown -R $(whoami) ~/.config/gh && gh auth login` |
 | S.3 | Start Docker daemon | User | TODO | Needed by Phase 01 |
 | S.4 | Install FFmpeg | Lead Orchestrator | TODO | Needed by Phase 04 |
@@ -18,18 +18,19 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 ## Phase 00 — Product discovery, PRD & architecture
 | ID | Task | Owner | Status | Output |
 |---|---|---|---|---|
-| T00.1 | PRD | Lead Orchestrator | IN_REVIEW | `docs/PRD.md` |
-| T00.2 | Integrations research | Lead Orchestrator + security-reviewer | IN_REVIEW | `docs/INTEGRATIONS.md` |
-| T00.3 | System architecture | backend-engineer + devops-engineer | IN_REVIEW | `docs/SYSTEM_ARCHITECTURE.md` |
-| T00.4 | AI architecture | backend-engineer | IN_REVIEW | `docs/AI_ARCHITECTURE.md` |
-| T00.5 | Database design + ERD | database-engineer | IN_REVIEW | `docs/DATABASE_DESIGN.md` |
-| T00.6 | Security design | security-reviewer | IN_REVIEW | `docs/SECURITY_DESIGN.md` |
-| T00.7 | Cost estimation | devops-engineer | IN_REVIEW | `docs/COST_ESTIMATION.md` |
-| T00.8 | Development roadmap | Lead Orchestrator + qa-engineer | IN_REVIEW | `docs/DEVELOPMENT_ROADMAP.md` |
-| T00.9 | Consistency review | code-reviewer | IN_PROGRESS | Completion report |
-| T00.10 | Completion report + tracker | Lead Orchestrator | TODO | `tasks/reports/PHASE_00_COMPLETION_REPORT.md` |
+| T00.1 | PRD | Lead Orchestrator | DONE | `docs/PRD.md` |
+| T00.2 | Integrations research | Lead Orchestrator + security-reviewer | DONE | `docs/INTEGRATIONS.md` |
+| T00.3 | System architecture | backend-engineer + devops-engineer | DONE | `docs/SYSTEM_ARCHITECTURE.md` |
+| T00.4 | AI architecture | backend-engineer | DONE | `docs/AI_ARCHITECTURE.md` |
+| T00.5 | Database design + ERD | database-engineer | DONE | `docs/DATABASE_DESIGN.md` |
+| T00.6 | Security design | security-reviewer | DONE | `docs/SECURITY_DESIGN.md` |
+| T00.7 | Cost estimation | devops-engineer | DONE | `docs/COST_ESTIMATION.md` |
+| T00.8 | Development roadmap | Lead Orchestrator + qa-engineer | DONE | `docs/DEVELOPMENT_ROADMAP.md` |
+| T00.9 | Consistency review | code-reviewer | DONE | Completion report |
+| T00.10 | Completion report + tracker | Lead Orchestrator | DONE | `tasks/reports/PHASE_00_COMPLETION_REPORT.md` |
 
 ## Change log
 - 2026-11-14 — Workspace inspected; Phase 00 plan prepared; tracker created.
+- 2026-11-14 — Review round 1: RETURN FOR FIXES (3 blocking); fixed; round 2: ACCEPT. Completion report written; Phase 00 IN_REVIEW awaiting user acceptance.
 - 2026-11-14 — Plan approved. 8 Phase 00 docs drafted (official sources verified 2026-11-14); independent review started.
 - 2026-11-14 — Git initialized locally, remote added, push blocked on auth; YouTube channel @Codehaksy recorded.

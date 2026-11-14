@@ -44,7 +44,7 @@ Each interface has a **mock implementation** used in unit tests, CI, and local d
 ## 4. AI tasks and pipelines
 | Task | Input | Output (schema) | Guardrails |
 |---|---|---|---|
-| **Topic synthesis** (Phase 02) | Normalized raw signals with provenance | Clustered topics with `sourceSignalIds[]`, a short rationale | Model **never** outputs metric numbers; scores are computed in code (§5) |
+| **Topic synthesis** (Phase 02, optional) | Normalized raw signals with provenance | Clustered topics with `sourceSignalIds[]`, a short rationale | Deterministic clustering (normalized title + `pg_trgm` similarity) is the default and works without an API key; the LLM only refines labels/rationales when a key is configured, under the budget guard. Model **never** outputs metric numbers; scores are computed in code (§5) |
 | **Idea generation** (03) | Approved topic + sources + past ideas summary + channel style guide | 5 ideas: audience, angle, hook, value prop, format, duration, `sourceRefs[]` | Dedup vs. history; diversity check (different angles) |
 | **Script + storyboard** (03) | Chosen idea + sources | Scenes: narration, on-screen code, highlight lines, caption, duration, transition, asset brief; `claims[]` each with `sourceRef` or `null` | 20–60 s word budget (~2.5 words/s); code ≤ 12 lines/scene |
 | **Code verification** (03) | Code blocks + language + expected output | Pass/fail, stdout, errors | Sandbox: no network, 10 s timeout, 256 MB, read-only FS |
@@ -59,7 +59,7 @@ Each interface has a **mock implementation** used in unit tests, CI, and local d
 |---|---|---|
 | Freshness | Age of first signal (exponential decay, 7-day half-life) | 0.20 |
 | Growth | Points/stars/questions velocity vs. trailing 4 weeks | 0.25 |
-| Relevance | Embedding/keyword match to niche definition | 0.25 |
+| Relevance | Keyword/tag match to the niche definition (embeddings optional later) | 0.25 |
 | Competition (inverse) | Count/recency of YouTube Shorts on the topic (`search.list`) | 0.15 |
 | Demand | Stack Overflow question volume, HN comments | 0.10 |
 | Repeatability | Evergreen-ness (topic recurs across weeks) | 0.05 |
@@ -71,7 +71,7 @@ Normalization: min-max within a weekly collection with winsorization at p5/p95. 
 - Prompt-injection defense: source texts are wrapped as quoted data; the system prompt states that source content is untrusted and contains no instructions. Outputs are schema-validated, and URLs in outputs must match the input source URLs.
 
 ## 7. Originality and policy controls
-- Similarity check of each new idea/script against all past scripts (pgvector cosine, threshold configurable). Similar items are flagged, not auto-rejected.
+- Similarity check of each new idea/script against all past ones using Postgres `pg_trgm` text similarity (no embedding provider or cost in MVP; pgvector + an embedding provider can be added later if needed). Similar items are flagged, not auto-rejected.
 - Template diversity: rotate between several visual layouts and hook styles to avoid "mass-produced template" signals.
 - **Human creative input is required** at script approval (edit or explicit "approve as is" with a note), recorded as evidence of creative direction.
 - No impersonation: TTS voices are stock voices; the voice never claims to be a human expert.

@@ -14,7 +14,7 @@
             │      │      │      └─ needs: YouTube upload scope (user), test channel/private mode
             │      │      └─ needs: TTS credential (user), FFmpeg (agent installs)
             │      └─ needs: Anthropic API key (user)
-            └─ needs: GCP project + YouTube read scope + API key (user)
+            └─ needs: GCP project + YouTube read scope + API key (user); Anthropic key optional
 01 needs: Docker running (user), GitHub push access (user)
 ```
 Where a credential is missing, the phase proceeds with **mock providers** and is marked `BLOCKED` only for the live-integration criteria.
@@ -33,7 +33,7 @@ Acceptance:
 8. Audit events are written for login and protected mutations.
 
 ### Phase 02 — Weekly trend research
-Acceptance: the manual run and the scheduled (cron) run both produce a collection; one failing source doesn't fail the run (isolated errors are recorded); duplicate signals/topics are merged; every `trend_metric` has source + timestamps; each score shows its breakdown, confidence, and missing components; tests cover missing, stale, and provider-failure cases; dashboard filter/compare/approve works. Live YouTube search requires the API key (else mock).
+Acceptance: the manual run and the scheduled (cron) run both produce a collection; one failing source doesn't fail the run (isolated errors are recorded); duplicate signals/topics are merged; every `trend_metric` has source + timestamps; each score shows its breakdown, confidence, and missing components; tests cover missing, stale, and provider-failure cases; dashboard filter/compare/approve works; the cost ledger and budget guard exist and are tested before any billable call (LLM topic labeling is optional); YouTube-sourced data about other channels expires within 30 days. Live YouTube search requires the API key (else mock).
 
 ### Phase 03 — Content strategy & scripts
 Acceptance: 5 distinct ideas per approved topic; scripts and scenes match the schema; every claim has a source or is flagged; code snippets are sandbox-verified (with tests for the escape attempts); versions are immutable; review state is explicit; tests cover malformed LLM output, refusal, truncation, and duplicate ideas; the budget guard blocks when over budget; cost is recorded per call.
@@ -42,7 +42,7 @@ Acceptance: 5 distinct ideas per approved topic; scripts and scenes match the sc
 Acceptance: at least one complete 1080×1920 test video renders, plays, and passes quality checks; every asset has license/provenance; retries don't duplicate production records; failure and recovery of the render worker are tested; quality failures are visible in the UI; TTS + render costs are recorded.
 
 ### Phase 05 — YouTube publishing
-Acceptance: OAuth with state + PKCE + encrypted tokens + disconnect/revoke; minimal scopes; the test upload is **private**, only after operator approval; remote status is verified; a simulated crash mid-upload does not produce a duplicate (marker reconciliation test); public publishing requires explicit approval; CI uses mocks.
+Acceptance: OAuth with state + PKCE + encrypted tokens + disconnect/revoke; minimal scopes; the test upload is **private**, only after operator approval; negative tests prove that a worker cannot create an approval, that editing any upload metadata (privacy, publish_at, title, description, tags, flags) invalidates the approval, and that `publish_at` without an owner `publish_public` approval is rejected; remote status is verified; a simulated crash mid-upload does not produce a duplicate (marker reconciliation test); public publishing requires explicit approval; CI uses mocks.
 
 ### Phase 06 — Analytics & performance
 Acceptance: scheduled + manual snapshots; only API-exposed metrics, each with source, window, and fetch time; delayed/estimated labels; idempotent refresh; calculations unit-tested; insights cite snapshot IDs and include a causation caveat.
@@ -77,6 +77,6 @@ Rules: tests are never weakened or deleted to make a suite pass; exact pass/fail
 | 04 | L | Renderer and FFmpeg pipeline is the hardest engineering piece |
 | 05 | M | OAuth + safe upload |
 | 06 | M | |
-| 07 | S | Ledger exists from 03 |
+| 07 | S | Ledger exists from 02 |
 | 08 | M | |
 | 09 | M | Plus a cloud account from the user |

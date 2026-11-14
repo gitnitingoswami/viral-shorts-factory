@@ -47,6 +47,7 @@ Sources: [videos.insert](https://developers.google.com/youtube/v3/docs/videos/in
 | 06 | `https://www.googleapis.com/auth/yt-analytics.readonly` | Analytics reports |
 | 07 (optional) | `https://www.googleapis.com/auth/yt-analytics-monetary.readonly` | Estimated revenue. Only if YPP and the operator opts in |
 | 05 | `https://www.googleapis.com/auth/youtube.upload` | Upload only. **Not** the broad `youtube` scope |
+| 05 | `https://www.googleapis.com/auth/youtube.readonly` (already granted in 02) | Upload-state verification and duplicate reconciliation via the uploads playlist |
 | 05 (optional) | `https://www.googleapis.com/auth/youtube.force-ssl` | Only if caption upload or metadata update after upload is needed; decide in Phase 05 |
 
 Public research calls (`search.list`, `videos.list` for public videos) use an **API key**, not user OAuth.
@@ -54,7 +55,7 @@ Scopes are requested incrementally per phase (Google incremental authorization).
 
 ### Quota budget (MVP)
 Weekly research: up to ~50 `search.list` calls (own bucket) + ~100 units of `videos.list` in the general bucket.
-Uploads: ≤ 5/week. Analytics refresh: a few hundred units/day at most. **Well inside defaults [A].**
+Uploads: ≤ 5/week (≤ 20/month). Analytics refresh: a few hundred units/day at most. **Well inside defaults [A].**
 
 ## 3. YouTube Analytics API
 Source: [reference](https://developers.google.com/youtube/analytics/reference).
@@ -81,8 +82,17 @@ Phase 02 must re-verify each source's terms and record the result in the source 
 ## 6. YouTube content policies that shape the product
 - **[V] Inauthentic content** (renamed from "repetitious", 2025-07-15): excludes "mass-produced, generic, repetitive, or manipulative" content and "AI-generated content made with generic or unoriginal templates giving the impression of mass production". Automated tools are allowed if "the final product must still demonstrate your creative vision" ([policy](https://support.google.com/youtube/answer/1311392)).
 - **[V] Reused content:** policy violations apply channel-wide.
-- **[V] YPP eligibility:** 1,000 subscribers + 4,000 watch hours/12 months **or** 10M Shorts views/90 days; updated terms take effect **2027-02-01** ([help](https://support.google.com/youtube/answer/72851)). **[S]** The reported 2027 thresholds are higher (8,000 h / 20M Shorts views); unconfirmed.
+- **[V] YPP eligibility:** 1,000 subscribers + 4,000 watch hours/12 months **or** 10M Shorts views/90 days; updated terms take effect **2027-02-01** ([help](https://support.google.com/youtube/answer/72851)). Secondary sources report higher 2027 thresholds; these are **unconfirmed on official pages, so the product does not rely on them**. Re-check in Phase 07.
 - **[V] Synthetic content disclosure:** disclosure is required for *realistic* altered/synthetic content. A synthetic TTS voice narrating code tips is likely not "realistic depiction" content **[A]**. **Default policy: set `containsSyntheticMedia=true` whenever an AI voice or AI-generated imagery is used.** This is conservative; per Google's help page, disclosure does not limit reach or monetization.
+
+## 6a. Regional, account and data restrictions
+- **[A] Channel requirements:** custom thumbnails and some features need a phone-verified channel (intermediate/advanced features). The operator should verify @Codehaksy in YouTube Studio before Phase 05.
+- **[V] YPP availability is country-dependent** (the help page lists eligible regions). The operator's country must be eligible before monetization tracking matters (Phase 07).
+- **[A] Google OAuth consent screen:** while the app is in **"Testing"** status (External), refresh tokens **expire after 7 days**, which breaks scheduled analytics/uploads. Options: move to "In production" (sensitive scopes like `youtube.upload` may then need Google verification), or accept weekly re-authorization during development. Decide in Phase 05.
+- **[A] YouTube API Services Developer Policies:** API data about other channels must be refreshed or deleted within 30 days. Research storage follows this (`DATABASE_DESIGN.md` §6). Re-verify in Phase 02.
+- **[A] Anthropic API:** available only in supported countries; the operator's account region must be supported. Data retention follows the account's terms.
+- **[A] TTS providers:** voice availability and commercial-use rights vary by region and plan; record the license per voice in `voice_profile`.
+- **[A] Google Trends alpha:** access is limited to approved testers.
 
 ## 7. Anthropic Claude API
 Source: the claude-api skill model table (cached 2026-11-03); re-check [pricing](https://platform.claude.com/docs/en/about-claude/pricing) in Phase 03.
@@ -116,7 +126,7 @@ A 60-second Short is ~800–1,000 characters, so TTS cost is **< $0.10/video at 
 |---|---|---|---|
 | 1 | GitHub push access | Now | `sudo chown -R $(whoami) ~/.config/gh && gh auth login && gh auth setup-git`, or add an SSH key |
 | 2 | Docker Desktop running | Phase 01 | Start the app |
-| 3 | GCP project, YouTube Data API v3 + YouTube Analytics API enabled, OAuth consent screen (External/Testing, operator as test user), OAuth client (Web), API key restricted to YouTube Data API | Phase 02 | Google Cloud Console |
+| 3 | GCP project, YouTube Data API v3 + YouTube Analytics API enabled, OAuth consent screen (External/Testing, operator as test user; note the 7-day refresh-token expiry in Testing, §6a), OAuth client (Web), API key restricted to YouTube Data API | Phase 02 | Google Cloud Console |
 | 4 | Anthropic API key with a monthly spend limit | Phase 03 | console.anthropic.com → put it in `.env` locally |
 | 5 | TTS provider credential | Phase 04 | After choosing in Phase 04 |
 | 6 | GitHub fine-grained read-only token for the GitHub search source | Phase 02 | Optional; unauthenticated works at a lower rate |
