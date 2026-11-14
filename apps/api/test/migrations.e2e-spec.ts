@@ -26,7 +26,9 @@ describe('migrations (disposable test DB)', () => {
   it('runs up → down → up cleanly', async () => {
     expect(await tables(ds)).toEqual([...TABLES].sort());
 
-    await ds.undoLastMigration({ transaction: 'each' });
+    while ((await ds.query(`SELECT 1 FROM schema_migrations LIMIT 1`)).length > 0) {
+      await ds.undoLastMigration({ transaction: 'each' });
+    }
     expect(await tables(ds)).toEqual([]);
 
     await ds.runMigrations({ transaction: 'each' });
@@ -51,5 +53,6 @@ describe('migrations (disposable test DB)', () => {
       VALUES ('00000000-0000-4000-8000-000000000001', 'system', 'test', 'success')`);
     await expect(ds.query(`UPDATE audit_event SET action = 'tampered'`)).rejects.toThrow(/append-only/);
     await expect(ds.query(`DELETE FROM audit_event`)).rejects.toThrow(/append-only/);
+    await expect(ds.query(`TRUNCATE audit_event`)).rejects.toThrow(/append-only/);
   });
 });

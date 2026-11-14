@@ -10,7 +10,8 @@ COPY libs/contracts libs/contracts
 COPY apps/web apps/web
 RUN npm run build -w @vsf/contracts && npm run build -w web
 
-FROM nginx:1.29-alpine AS runtime
+# Runs as an unprivileged user (uid 101), listening on 8080.
+FROM nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6 AS runtime
 COPY infra/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist/web/browser /usr/share/nginx/html
 EXPOSE 8080

@@ -1,5 +1,4 @@
-import { LOCKOUT_MINUTES, MAX_FAILED_LOGINS } from '../common/constants';
-import { hashToken, isLocked, newRefreshToken, nextLockState, refreshCookieOptions } from './token.util';
+import { hashToken, isLocked, lockoutMinutes, newRefreshToken, refreshCookieOptions } from './token.util';
 
 describe('token utilities', () => {
   it('creates high-entropy unique refresh tokens', () => {
@@ -25,15 +24,9 @@ describe('token utilities', () => {
 describe('lockout policy', () => {
   const now = new Date('2026-11-14T12:00:00Z');
 
-  it('increments the failure count below the threshold', () => {
-    expect(nextLockState(0, now)).toEqual({ failedLoginCount: 1, lockedUntil: null });
-    expect(nextLockState(MAX_FAILED_LOGINS - 2, now).lockedUntil).toBeNull();
-  });
-
-  it('locks at the threshold and resets the counter', () => {
-    const s = nextLockState(MAX_FAILED_LOGINS - 1, now);
-    expect(s.failedLoginCount).toBe(0);
-    expect(s.lockedUntil?.getTime()).toBe(now.getTime() + LOCKOUT_MINUTES * 60_000);
+  it('doubles the lock duration per successive lockout, capped at 24 h', () => {
+    expect([0, 1, 2, 3].map(lockoutMinutes)).toEqual([15, 30, 60, 120]);
+    expect(lockoutMinutes(20)).toBe(24 * 60);
   });
 
   it('reports locked only while the lock is in the future', () => {

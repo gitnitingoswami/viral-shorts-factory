@@ -1,6 +1,6 @@
 import { CallHandler, ExecutionContext, HttpException, Injectable, NestInterceptor } from '@nestjs/common';
 import type { Response } from 'express';
-import { Observable, tap } from 'rxjs';
+import { catchError, concatMap, from, map, Observable, throwError } from 'rxjs';
 import { AuthedRequest, correlationIdOf } from '../common/auth-user';
 import { AuditService } from './audit.service';
 
@@ -30,18 +30,20 @@ export class AuditInterceptor implements NestInterceptor {
       ip: req.ip ?? null,
     };
 
+    // The audit row is written before the response is sent, so an acknowledged change is always audited.
     return next.handle().pipe(
-      tap({
-        next: (body: unknown) => {
-          const res = ctx.switchToHttp().getResponse<Response>();
-          const subjectId =
-            body && typeof body === 'object' && 'id' in body ? String(body.id) : null;
-          void this.audit.record({ ...base, subjectId, outcome: 'success', details: { statusCode: res.statusCode } });
-        },
-        error: (err: unknown) => {
-          const statusCode = err instanceof HttpException ? err.getStatus() : 500;
-          void this.audit.record({ ...base, outcome: 'failure', details: { statusCode } });
-        },
+      concatMap((body: unknown) => {
+        const res = ctx.switchToHttp().getResponse<Response>();
+        const subjectId = body && typeof body === 'object' && 'id' in body ? String(body.id) : null;
+        return from(
+          this.audit.record({ ...base, subjectId, outcome: 'success', details: { statusCode: res.statusCode } }),
+        ).pipe(map(() => body));
+      }),
+      catchError((err: unknown) => {
+        const statusCode = err instanceof HttpException ? err.getStatus() : 500;
+        return from(this.audit.record({ ...base, outcome: 'failure', details: { statusCode } })).pipe(
+          concatMap(() => throwError(() => err)),
+        );
       }),
     );
   }

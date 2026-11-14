@@ -11,3 +11,9 @@ export const JOB_TYPE_PING = 'maintenance.ping';
 /** Login lockout policy. */
 export const MAX_FAILED_LOGINS = 5;
 export const LOCKOUT_MINUTES = 15;
+/** Each successive lockout doubles, up to this cap (backoff). */
+export const MAX_LOCKOUT_MINUTES = 24 * 60;
+
+/** Background reconciliation of jobs whose queue message was lost or whose worker died. */
+export const STALE_QUEUED_MS = 30_000;
+export const STALE_RUNNING_MS = 15 * 60_000;

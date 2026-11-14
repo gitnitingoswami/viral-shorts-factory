@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { CookieOptions } from 'express';
-import { LOCKOUT_MINUTES, MAX_FAILED_LOGINS, REFRESH_COOKIE_PATH } from '../common/constants';
+import { LOCKOUT_MINUTES, MAX_LOCKOUT_MINUTES, REFRESH_COOKIE_PATH } from '../common/constants';
 
 /** 256-bit opaque refresh token (only its SHA-256 hash is stored). */
 export function newRefreshToken(): string {
@@ -21,16 +21,12 @@ export function refreshCookieOptions(secure: boolean, ttlDays: number): CookieOp
   };
 }
 
-/** Lockout policy: after MAX_FAILED_LOGINS consecutive failures, lock for LOCKOUT_MINUTES. */
-export function nextLockState(
-  failedCount: number,
-  now: Date,
-): { failedLoginCount: number; lockedUntil: Date | null } {
-  const next = failedCount + 1;
-  if (next >= MAX_FAILED_LOGINS) {
-    return { failedLoginCount: 0, lockedUntil: new Date(now.getTime() + LOCKOUT_MINUTES * 60_000) };
-  }
-  return { failedLoginCount: next, lockedUntil: null };
+/**
+ * Lock duration for the n-th lockout (0-based): 15, 30, 60, ... minutes, capped at 24 h.
+ * Mirrors the SQL in AuthService.recordFailedAttempt (documentation + unit-tested reference).
+ */
+export function lockoutMinutes(previousLockouts: number): number {
+  return Math.min(LOCKOUT_MINUTES * 2 ** previousLockouts, MAX_LOCKOUT_MINUTES);
 }
 
 export function isLocked(lockedUntil: Date | null, now: Date): boolean {

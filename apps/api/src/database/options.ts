@@ -1,9 +1,10 @@
 import { DataSourceOptions } from 'typeorm';
 import { ALL_ENTITIES } from './entities';
 import { InitialSchema1763150000000 } from './migrations/1763150000000-InitialSchema';
+import { AuthAndAuditHardening1763240000000 } from './migrations/1763240000000-AuthAndAuditHardening';
 
 /** Ordered list of migrations. Add new migrations here (explicit list, no glob, so builds and tests agree). */
-export const MIGRATIONS = [InitialSchema1763150000000];
+export const MIGRATIONS = [InitialSchema1763150000000, AuthAndAuditHardening1763240000000];
 
 export interface DbSettings {
   host: string;

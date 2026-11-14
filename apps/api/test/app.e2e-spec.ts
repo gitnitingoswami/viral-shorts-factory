@@ -229,6 +229,83 @@ describe('API (e2e)', () => {
     });
   });
 
+  describe('review fixes: concurrency and recovery', () => {
+    it('counts concurrent failed logins atomically (parallel guessing cannot bypass the lockout)', async () => {
+      const email = 'parallel@test.local';
+      const password = 'parallel-password-123';
+      await createUser(app, email, password, 'reviewer');
+      const results = await Promise.all(Array.from({ length: 6 }, () => login(email, 'wrong-password')));
+      expect(results.every((r) => r.status === 401)).toBe(true);
+      await login(email, password).expect(401);
+      const [row] = await ds.query<Array<{ lockout_count: number; locked: boolean }>>(
+        `SELECT lockout_count, locked_until > now() AS locked FROM user_account WHERE email = $1`,
+        [email],
+      );
+      expect(row).toEqual({ lockout_count: 1, locked: true });
+    });
+
+    it('serializes concurrent refreshes of the same token: one wins, then the whole family is revoked', async () => {
+      const cookie = cookieFrom((await login(OWNER.email, OWNER.password)).headers['set-cookie'], 'vsf_refresh')!;
+      const [a, b] = await Promise.all([
+        request(http).post('/api/auth/refresh').set(CSRF).set('Cookie', cookie),
+        request(http).post('/api/auth/refresh').set(CSRF).set('Cookie', cookie),
+      ]);
+      expect([a.status, b.status].sort()).toEqual([200, 401]);
+      const winner = a.status === 200 ? a : b;
+      const winnerCookie = cookieFrom(winner.headers['set-cookie'], 'vsf_refresh')!;
+      // The loser's request was a reuse of a consumed token, so the winner's new token must be dead too.
+      await request(http).post('/api/auth/refresh').set(CSRF).set('Cookie', winnerCookie).expect(401);
+    });
+
+    it('returns 409 (not 500) when two creates race on a unique constraint', async () => {
+      const body = { platform: 'youtube', handle: '@race_condition', title: 'race' };
+      const auth = { Authorization: `Bearer ${ownerToken}` };
+      const results = await Promise.all([
+        request(http).post('/api/channels').set(auth).send(body),
+        request(http).post('/api/channels').set(auth).send(body),
+      ]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    });
+
+    it('audits authorization denials with the client IP from the trusted proxy header', async () => {
+      await request(http)
+        .post('/api/channels')
+        .set('Authorization', `Bearer ${reviewerToken}`)
+        .set('X-Forwarded-For', '203.0.113.7')
+        .send({ platform: 'youtube', handle: '@denied_one', title: 'x' })
+        .expect(403);
+      const rows = await ds.query<Array<{ ip: string; subject_id: string }>>(
+        `SELECT ip, subject_id FROM audit_event WHERE action = 'http.denied' ORDER BY occurred_at DESC LIMIT 1`,
+      );
+      expect(rows[0]).toEqual({ ip: '203.0.113.7', subject_id: 'POST /api/channels' });
+    });
+
+    it('recovers jobs without a restart: lost queue messages and abandoned running jobs', async () => {
+      const worker = await createWorker();
+      try {
+        const [lost] = await ds.query<Array<{ id: string }>>(
+          `INSERT INTO job (workspace_id, type, queue, idempotency_key, status, updated_at)
+           VALUES ('00000000-0000-4000-8000-000000000001', 'maintenance.ping', 'maintenance', 'e2e-lost-message', 'queued', now() - interval '5 minutes')
+           RETURNING id`,
+        );
+        const [stuck] = await ds.query<Array<{ id: string }>>(
+          `INSERT INTO job (workspace_id, type, queue, idempotency_key, status, attempt, started_at)
+           VALUES ('00000000-0000-4000-8000-000000000001', 'maintenance.ping', 'maintenance', 'e2e-stuck-running', 'running', 1, now() - interval '1 hour')
+           RETURNING id`,
+        );
+        for (const id of [lost.id, stuck.id]) {
+          const done = await waitFor(async () => {
+            const [row] = await ds.query<Array<{ status: string }>>(`SELECT status FROM job WHERE id = $1`, [id]);
+            return row.status === 'completed' ? row : undefined;
+          }, 15_000);
+          expect(done.status).toBe('completed');
+        }
+      } finally {
+        await worker.close();
+      }
+    });
+  });
+
   describe('audit events API', () => {
     it('pages audit events newest first for owners', async () => {
       const res = await request(http).get('/api/audit-events?limit=5').set('Authorization', `Bearer ${ownerToken}`).expect(200);

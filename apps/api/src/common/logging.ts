@@ -15,11 +15,21 @@ export function correlationId(req: IncomingMessage, res: ServerResponse): string
   return id;
 }
 
+/** pino-pretty is a devDependency; production images don't include it. */
+function isInstalled(pkg: string): boolean {
+  try {
+    require.resolve(pkg);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Structured JSON logs; secrets and cookies are redacted. Pretty output only in development. */
 export const AppLoggerModule = LoggerModule.forRootAsync({
   inject: [ConfigService],
   useFactory: (config: AppConfigService) => {
-    const env = config.get('NODE_ENV', { infer: true });
+    const pretty = config.get('NODE_ENV', { infer: true }) === 'development' && isInstalled('pino-pretty');
     return {
       pinoHttp: {
         level: config.get('LOG_LEVEL', { infer: true }),
@@ -37,7 +47,7 @@ export const AppLoggerModule = LoggerModule.forRootAsync({
           censor: '[REDACTED]',
         },
         autoLogging: { ignore: (req: IncomingMessage) => req.url?.startsWith('/api/health') ?? false },
-        transport: env === 'development' ? { target: 'pino-pretty', options: { singleLine: true } } : undefined,
+        transport: pretty ? { target: 'pino-pretty', options: { singleLine: true } } : undefined,
       },
     };
   },

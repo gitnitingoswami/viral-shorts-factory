@@ -29,6 +29,7 @@ export class UserAccountEntity {
   @Column('text', { name: 'password_hash', select: false }) passwordHash: string;
   @Column('text') role: UserRole;
   @Column('int', { name: 'failed_login_count', default: 0 }) failedLoginCount: number;
+  @Column('int', { name: 'lockout_count', default: 0 }) lockoutCount: number;
   @Column('timestamptz', { name: 'locked_until', nullable: true }) lockedUntil: Date | null;
   @Column('timestamptz', { name: 'last_login_at', nullable: true }) lastLoginAt: Date | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;

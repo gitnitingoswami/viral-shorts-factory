@@ -1,4 +1,4 @@
-import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job } from 'bullmq';
@@ -6,28 +6,22 @@ import { DataSource, In, Repository } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { JOB_TYPE_PING, QUEUE_MAINTENANCE } from '../common/constants';
 import { JobEntity } from '../database/entities';
-import { JobsService, QueuePayload } from './jobs.service';
+import type { QueuePayload } from './jobs.service';
 
 /**
  * Worker for the `maintenance` queue. Each step updates the Postgres job row, which is the source of
  * truth for status, attempts and progress. Only registered in the worker process (src/worker.ts).
  */
 @Processor(QUEUE_MAINTENANCE, { concurrency: 2 })
-export class MaintenanceProcessor extends WorkerHost implements OnApplicationBootstrap {
+export class MaintenanceProcessor extends WorkerHost {
   private readonly logger = new Logger(MaintenanceProcessor.name);
 
   constructor(
     @InjectRepository(JobEntity) private readonly repo: Repository<JobEntity>,
     private readonly dataSource: DataSource,
-    private readonly jobs: JobsService,
     private readonly audit: AuditService,
   ) {
     super();
-  }
-
-  async onApplicationBootstrap(): Promise<void> {
-    const n = await this.jobs.reconcileQueued(0);
-    if (n) this.logger.log(`Re-dispatched ${n} queued job(s) on startup`);
   }
 
   async process(job: Job<QueuePayload>): Promise<Record<string, unknown>> {
@@ -38,9 +32,9 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
       .update()
       .set({ status: 'running', attempt: () => 'attempt + 1', startedAt: () => 'now()', error: null })
       .where('id = :jobId AND status IN (:...statuses)', { jobId, statuses: ['queued', 'running'] })
-      .returning(['id', 'type'])
+      .returning(['id', 'type', 'workspace_id'])
       .execute();
-    const row = (claimed.raw as Array<{ id: string; type: string }>)[0];
+    const row = (claimed.raw as Array<{ id: string; type: string; workspace_id: string }>)[0];
     if (!row) {
       this.logger.warn({ jobId }, 'Job already finished or cancelled; skipping');
       return { skipped: true };
@@ -52,7 +46,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         await this.dataSource.query('SELECT 1');
         const output = { pong: true, dbLatencyMs: Date.now() - started };
         await this.repo.update(jobId, { status: 'completed', progress: 100, output, finishedAt: new Date() });
-        await this.audit.record({ actorType: 'worker', action: 'job.completed', subjectType: 'job', subjectId: jobId, outcome: 'success', details: { type: row.type } });
+        await this.audit.record({ actorType: 'worker', workspaceId: row.workspace_id, action: 'job.completed', subjectType: 'job', subjectId: jobId, outcome: 'success', details: { type: row.type } });
         return output;
       }
       default:
@@ -71,7 +65,8 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         : { status: 'queued', error: err.message.slice(0, 500) },
     );
     if (finalAttempt) {
-      await this.audit.record({ actorType: 'worker', action: 'job.failed', subjectType: 'job', subjectId: job.data.jobId, outcome: 'failure', details: { error: err.message.slice(0, 200) } });
+      const owner = await this.repo.findOne({ where: { id: job.data.jobId }, select: { id: true, workspaceId: true } });
+      await this.audit.record({ actorType: 'worker', workspaceId: owner?.workspaceId, action: 'job.failed', subjectType: 'job', subjectId: job.data.jobId, outcome: 'failure', details: { error: err.message.slice(0, 200) } });
     }
   }
 }

@@ -17,6 +17,16 @@ export const envSchema = z
     APP_VERSION: z.string().default('0.1.0'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
     CORS_ORIGINS: z.string().default('http://localhost:4200'),
+    /**
+     * Express "trust proxy": 'false' (direct exposure), a hop count (e.g. '1' behind one nginx), or a
+     * comma-separated list of proxy IPs/CIDRs. 'true' is rejected: it would let clients spoof their IP.
+     */
+    TRUST_PROXY: z
+      .string()
+      .default('false')
+      .refine((v) => v !== 'true', "TRUST_PROXY must be a hop count or proxy CIDR list, never 'true'"),
+    /** How often the worker re-dispatches stale queued jobs and recovers stuck running jobs. */
+    JOB_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(200).default(60_000),
 
     DB_HOST: z.string().min(1).default('localhost'),
     DB_PORT: z.coerce.number().int().default(55432),

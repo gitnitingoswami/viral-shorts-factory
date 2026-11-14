@@ -28,7 +28,7 @@ function jobRow(id = 'j1'): JobEntity {
   });
 }
 
-function setup(insertedRows: unknown[], addImpl?: () => Promise<unknown>) {
+function setup(insertedRows: unknown[], addImpl?: () => Promise<unknown>, existing?: { getState: () => Promise<string>; remove: jest.Mock }) {
   const execute = jest.fn().mockResolvedValue({ raw: insertedRows });
   const qb = { insert: () => qb, into: () => qb, values: () => qb, orIgnore: () => qb, returning: () => qb, execute };
   const repo = {
@@ -36,7 +36,10 @@ function setup(insertedRows: unknown[], addImpl?: () => Promise<unknown>) {
     findOneOrFail: jest.fn().mockResolvedValue(jobRow()),
     find: jest.fn().mockResolvedValue([jobRow('a'), jobRow('b')]),
   } as unknown as Repository<JobEntity>;
-  const queue = { add: jest.fn(addImpl ?? (() => Promise.resolve({}))) } as unknown as Queue;
+  const queue = {
+    add: jest.fn(addImpl ?? (() => Promise.resolve({}))),
+    getJob: jest.fn().mockResolvedValue(existing),
+  } as unknown as Queue;
   return { service: new JobsService(repo, queue), queue };
 }
 
@@ -68,6 +71,24 @@ describe('JobsService.enqueue', () => {
   it('rejects an unknown queue', async () => {
     const { service } = setup([]);
     await expect(service.enqueue({ type: 't', queue: 'nope', idempotencyKey: 'k' })).rejects.toThrow(/Unknown queue/);
+  });
+});
+
+describe('JobsService dispatch of an existing queue entry', () => {
+  it('replaces a finished (completed/failed) entry so a recovered job runs again', async () => {
+    const remove = jest.fn().mockResolvedValue(undefined);
+    const { service, queue } = setup([{ id: 'j1' }], undefined, { getState: () => Promise.resolve('completed'), remove });
+    await service.enqueue({ type: 'maintenance.ping', queue: QUEUE_MAINTENANCE, idempotencyKey: 'k1' });
+    expect(remove).toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a waiting/active entry alone (already queued)', async () => {
+    const remove = jest.fn();
+    const { service, queue } = setup([{ id: 'j1' }], undefined, { getState: () => Promise.resolve('active'), remove });
+    await service.enqueue({ type: 'maintenance.ping', queue: QUEUE_MAINTENANCE, idempotencyKey: 'k1' });
+    expect(remove).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });
 

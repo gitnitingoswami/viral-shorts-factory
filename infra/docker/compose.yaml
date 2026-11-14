@@ -8,12 +8,12 @@ services:
       POSTGRES_USER: ${DB_USER:-vsf}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-vsf_local_only}
       POSTGRES_DB: ${DB_NAME:-vsf}
-    ports: ["${DB_PORT:-55432}:5432"]
+    ports: ["127.0.0.1:${DB_PORT:-55432}:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "vsf"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -21,7 +21,7 @@ services:
   redis:
     image: redis:8-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
-    ports: ["${REDIS_PORT:-56379}:6379"]
+    ports: ["127.0.0.1:${REDIS_PORT:-56379}:6379"]
     volumes: [redisdata:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -31,9 +31,10 @@ services:
 
   # S3-compatible object storage for local dev (MinIO images are no longer published).
   storage:
-    image: chrislusf/seaweedfs:latest
+    # Pinned by digest (SECURITY_DESIGN T14); bump deliberately.
+    image: chrislusf/seaweedfs@sha256:ccad23e18639c8b98cee17e7100b95830a06077b56d8e5b006d6dcf8ec5e94a0
     command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-ip.bind=0.0.0.0"]
-    ports: ["${STORAGE_PORT:-8333}:8333"]
+    ports: ["127.0.0.1:${STORAGE_PORT:-8333}:8333"]
     volumes:
       - s3data:/data
       - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
@@ -43,7 +44,11 @@ services:
     profiles: ["app"]
     build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
     env_file: ../../.env
-    environment:
+    environment: &app-env
+      NODE_ENV: production
+      COOKIE_SECURE: "true"
+      SWAGGER_ENABLED: "false"
+      TRUST_PROXY: "1" # exactly one proxy (nginx) in front of the API
       DB_HOST: postgres
       DB_PORT: "5432"
       REDIS_HOST: redis
@@ -52,7 +57,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-    ports: ["3100:3100"]
+    # Not published: reachable only through nginx (web), so client IPs are trustworthy.
 
   worker:
     profiles: ["app"]
@@ -61,11 +66,8 @@ services:
     healthcheck: { disable: true }
     env_file: ../../.env
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      STORAGE_ENDPOINT: http://storage:8333
+      <<: *app-env
+      TRUST_PROXY: "false"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -74,7 +76,7 @@ services:
     profiles: ["app"]
     build: { context: ../.., dockerfile: infra/docker/web.Dockerfile }
     depends_on: [api]
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
 
 volumes:
   pgdata:

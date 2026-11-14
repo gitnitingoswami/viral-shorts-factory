@@ -126,8 +126,36 @@ export class JobsService {
     return count;
   }
 
+  /**
+   * Recovers jobs left `running` past the timeout (e.g. the worker process died before recording the
+   * outcome): requeue while attempts remain, otherwise mark failed. Returns the number of rows changed.
+   */
+  async sweepStaleRunning(timeoutMs: number): Promise<number> {
+    const requeued = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'queued', error: 'Recovered after worker timeout' })
+      .where(`status = 'running' AND started_at < now() - make_interval(secs => :secs) AND attempt < max_attempts`, { secs: timeoutMs / 1000 })
+      .execute();
+    const failed = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'failed', error: 'Timed out after final attempt', finishedAt: () => 'now()' })
+      .where(`status = 'running' AND started_at < now() - make_interval(secs => :secs) AND attempt >= max_attempts`, { secs: timeoutMs / 1000 })
+      .execute();
+    return (requeued.affected ?? 0) + (failed.affected ?? 0);
+  }
+
   private async dispatch(queue: Queue, job: JobEntity): Promise<void> {
     try {
+      // BullMQ ignores add() for a jobId it still holds. A finished entry (e.g. a job recovered after a
+      // worker crash) must be removed first; a waiting/active/delayed entry means it is already queued.
+      const existing = await queue.getJob(job.id);
+      if (existing) {
+        const state = await existing.getState();
+        if (state !== 'completed' && state !== 'failed') return;
+        await existing.remove();
+      }
       await queue.add(job.type, { jobId: job.id } satisfies QueuePayload, {
         jobId: job.id,
         attempts: job.maxAttempts,
