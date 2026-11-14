@@ -99,4 +99,4 @@ Default LLM provider: Claude (latest Claude 5 models) behind a provider interfac
 Application code, dependency installation, cloud resources, account connections, uploads, emails.
 
 ## 10. Approval
-**Status:** Pending user approval of this plan, the §7 decisions, and Git setup.
+**Status:** APPROVED by user 2026-11-14 with recommended defaults for §7.

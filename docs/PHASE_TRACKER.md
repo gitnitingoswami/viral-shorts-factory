@@ -4,7 +4,7 @@ Status values: `NOT_STARTED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED`, `IN_REVIEW`, 
 
 | Phase | Name | Status | Owner | Completion report |
 |---|---|---|---|---|
-| 00 | Product discovery, PRD & architecture | PLANNED | Lead Orchestrator | — (plan: `tasks/plans/PHASE_00_PLAN.md`) |
+| 00 | Product discovery, PRD & architecture | IN_PROGRESS | Lead Orchestrator | — (plan: `tasks/plans/PHASE_00_PLAN.md`) |
 | 01 | Project foundation | NOT_STARTED | Lead Orchestrator | — |
 | 02 | Weekly trend research engine | NOT_STARTED | Lead Orchestrator | — |
 | 03 | AI content strategy and scripts | NOT_STARTED | Lead Orchestrator | — |
