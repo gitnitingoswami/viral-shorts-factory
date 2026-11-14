@@ -6,11 +6,13 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 ## Setup / blockers
 | ID | Task | Owner | Status | Notes |
 |---|---|---|---|---|
-| S.1 | Initialize Git repo, add remote | Lead Orchestrator | BLOCKED | Waiting for remote repo URL from user |
+| S.1 | Initialize Git repo, add remote | Lead Orchestrator | DONE | Local repo on `main` (c4cddaf); remote `origin` = gitnitingoswami/desktop-tutorial; working branch `phase-00/product-discovery` |
+| S.1b | Push access to GitHub remote | User | BLOCKED | HTTPS: stored credential invalid; SSH: key `~/.ssh/id_rsa` not registered with GitHub |
 | S.2 | Fix `~/.config/gh` ownership (root-owned) and authenticate `gh` | User | BLOCKED | `sudo chown -R $(whoami) ~/.config/gh && gh auth login` |
 | S.3 | Start Docker daemon | User | TODO | Needed by Phase 01 |
 | S.4 | Install FFmpeg | Lead Orchestrator | TODO | Needed by Phase 04 |
 | S.5 | Resolve phase-gate rule conflict | User | BLOCKED | See `tasks/plans/PHASE_00_PLAN.md` §2 |
+| S.7 | YouTube target channel | User | DONE | `@Codehaksy` recorded as target channel; no OAuth connection yet (needed from Phase 02) |
 | S.6 | Product decisions (niche, platforms, budget, cloud, publishing mode) | User | BLOCKED | See plan §7 |
 
 ## Phase 00 — Product discovery, PRD & architecture
@@ -29,3 +31,4 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 
 ## Change log
 - 2026-11-14 — Workspace inspected; Phase 00 plan prepared; tracker created.
+- 2026-11-14 — Git initialized locally, remote added, push blocked on auth; YouTube channel @Codehaksy recorded.
