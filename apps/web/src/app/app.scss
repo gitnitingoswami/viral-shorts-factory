@@ -1,0 +1,7 @@
+.global-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 4px;
+  z-index: 1000;
+  pointer-events: none;
+}

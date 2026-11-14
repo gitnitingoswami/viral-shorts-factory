@@ -40,7 +40,7 @@ flowchart LR
 | Queue | **Redis + BullMQ** | Postgres-only queue (pg-boss), Temporal | Mature retries/backoff/priorities/flows; Temporal is overkill at MVP scale. Durable state is in Postgres, so Redis loss is recoverable |
 | Workflow orchestration | **DB state machine + BullMQ flows** | Temporal, AWS Step Functions | Keeps the stack small; Postgres is the source of truth for workflow state (see §6) |
 | Rendering | **FFmpeg CLI** in a worker container; code frames rendered to PNG via **Shiki** (syntax highlighting) + **Satori/resvg** or headless Chromium | Remotion, cloud render APIs | Deterministic, free, scriptable. Remotion licensing and its React dependency are unnecessary |
-| Storage | **S3-compatible API** (MinIO locally; S3 or Azure Blob in cloud) | Local disk | Same code in every environment; signed URLs for preview |
+| Storage | **S3-compatible API** (SeaweedFS locally; S3 or an S3-compatible store in cloud) | Local disk | Same code in every environment; signed URLs for preview |
 | Code verification | **Separate sandbox-runner service** starting ephemeral gVisor/rootless containers (workers never get `docker.sock`) with no network, CPU/memory/time limits, read-only FS except `/tmp` | Remote sandbox services | Runs untrusted LLM-written code safely; supports node/ts/python/sql (via SQLite/pg-in-container) |
 | Auth | **Local accounts, argon2id, short-lived JWT access + rotating refresh cookie; TOTP MFA in Phase 09** | External IdP | Single operator; no third-party dependency. OAuth to Google is only for *integrations*, not app login |
 | API style | **REST + OpenAPI (Swagger)**, server-sent events for job progress | GraphQL, WebSockets | Simple; SSE is enough for one-way progress |
@@ -135,3 +135,16 @@ Docker Compose: `postgres`, `redis`, `minio`, `api`, `worker`, `web` (dev server
 | RPO / RTO (production) | 24 h / 4 h (nightly backup; documented restore) |
 | Availability | Best effort (single VM); no SLA for an internal tool |
 | Security | See `SECURITY_DESIGN.md` |
+
+## 12. Phase 01 implementation decisions (2026-11-15)
+Recorded deviations and refinements from the Phase 00 design:
+| Topic | Phase 00 design | Implemented | Reason |
+|---|---|---|---|
+| Worker | Separate `apps/worker` app | Second entrypoint `apps/api/src/worker.ts` (same codebase and image, separate process) | Shares entities and services without a third package; scales independently |
+| Local object storage | MinIO | SeaweedFS (S3 API) | MinIO no longer publishes container images; app uses the standard S3 API, so production can use S3 or another S3-compatible store |
+| Local ports | Defaults | Postgres 55432, Redis 56379, API 3100 | Avoid clashing with other local projects |
+| Runtime | Node LTS | Node 24.22.3, TypeScript 6.0, NestJS 12 (ESM packages), Angular 22, TypeORM 0.3.31 | Current supported versions; TypeORM 1.x was 2 days old at the time |
+| Access token signing | EdDSA | HS256 with ≥32-char secret, issuer/audience checked | Simpler for the MVP's single service; revisit in Phase 09 |
+| IDs | App-generated UUIDv7 | `gen_random_uuid()` (v4) | Postgres 17 lacks native v7; revisit if index locality matters |
+| Queue isolation | n/a | `QUEUE_PREFIX` per environment | Dev and test workers sharing one Redis must not consume each other's jobs |
+| Rate limiting | Login limits | 120 req/min global, 5/min login, 30/min refresh; `THROTTLE_ENABLED` must stay true in production | |

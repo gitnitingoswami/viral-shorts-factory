@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Viral Shorts Factory</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Content Security Policy (threat T10). No 'unsafe-eval' (Angular AOT needs none) and no inline
+    scripts. 'unsafe-inline' for styles only: Angular/Material inject component <style> tags at runtime.
+    frame-ancestors / report-to cannot be set via <meta>; the serving layer (nginx/API) must also send
+    the header form: frame-ancestors 'none' plus the same directives below.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

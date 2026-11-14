@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+.angular
+package-lock.json
+docs
+phases
+tasks
+templates
+*.md

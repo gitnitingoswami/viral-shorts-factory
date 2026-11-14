@@ -1,0 +1,61 @@
+<h1 class="page-title">Audit log</h1>
+
+<section aria-live="polite" aria-label="Audit events">
+  @if (loading() && !page()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading audit events" />
+      <span>Loading audit events…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (page(); as p) {
+    @if (p.total === 0) {
+      <p class="state" data-testid="audit-empty">No audit events recorded yet.</p>
+    } @else {
+      <div class="table-scroll">
+        <table mat-table [dataSource]="p.items">
+          <ng-container matColumnDef="occurredAt">
+            <th mat-header-cell *matHeaderCellDef scope="col">When</th>
+            <td mat-cell *matCellDef="let e">{{ e.occurredAt | date: 'medium' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="actor">
+            <th mat-header-cell *matHeaderCellDef scope="col">Actor</th>
+            <td mat-cell *matCellDef="let e">{{ e.actorType }}{{ e.actorId ? ' · ' + e.actorId : '' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="action">
+            <th mat-header-cell *matHeaderCellDef scope="col">Action</th>
+            <td mat-cell *matCellDef="let e">{{ e.action }}</td>
+          </ng-container>
+          <ng-container matColumnDef="subject">
+            <th mat-header-cell *matHeaderCellDef scope="col">Subject</th>
+            <td mat-cell *matCellDef="let e">
+              {{ e.subjectType ?? '—' }}{{ e.subjectId ? ' · ' + e.subjectId : '' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="outcome">
+            <th mat-header-cell *matHeaderCellDef scope="col">Outcome</th>
+            <td mat-cell *matCellDef="let e">{{ e.outcome }}</td>
+          </ng-container>
+          <ng-container matColumnDef="correlationId">
+            <th mat-header-cell *matHeaderCellDef scope="col">Correlation ID</th>
+            <td mat-cell *matCellDef="let e">{{ e.correlationId ?? '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="columns"></tr>
+          <tr mat-row *matRowDef="let row; columns: columns"></tr>
+        </table>
+      </div>
+    }
+    <mat-paginator
+      [length]="p.total"
+      [pageSize]="pageSize()"
+      [pageIndex]="pageIndex()"
+      [pageSizeOptions]="pageSizeOptions"
+      [disabled]="loading()"
+      (page)="onPage($event)"
+      aria-label="Select audit log page"
+    />
+  }
+</section>

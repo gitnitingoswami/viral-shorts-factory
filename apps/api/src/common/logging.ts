@@ -1,0 +1,44 @@
+import { randomUUID } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { LoggerModule } from 'nestjs-pino';
+import { AppConfigService } from '../config/config';
+import { ConfigService } from '@nestjs/config';
+import { CORRELATION_HEADER } from './constants';
+
+const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+
+/** Reuses a well-formed inbound correlation ID, otherwise generates one; echoes it on the response. */
+export function correlationId(req: IncomingMessage, res: ServerResponse): string {
+  const inbound = req.headers[CORRELATION_HEADER];
+  const id = typeof inbound === 'string' && SAFE_ID.test(inbound) ? inbound : randomUUID();
+  res.setHeader(CORRELATION_HEADER, id);
+  return id;
+}
+
+/** Structured JSON logs; secrets and cookies are redacted. Pretty output only in development. */
+export const AppLoggerModule = LoggerModule.forRootAsync({
+  inject: [ConfigService],
+  useFactory: (config: AppConfigService) => {
+    const env = config.get('NODE_ENV', { infer: true });
+    return {
+      pinoHttp: {
+        level: config.get('LOG_LEVEL', { infer: true }),
+        genReqId: correlationId,
+        customProps: () => ({ service: 'vsf-api' }),
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            '*.password',
+            '*.accessToken',
+            '*.refreshToken',
+          ],
+          censor: '[REDACTED]',
+        },
+        autoLogging: { ignore: (req: IncomingMessage) => req.url?.startsWith('/api/health') ?? false },
+        transport: env === 'development' ? { target: 'pino-pretty', options: { singleLine: true } } : undefined,
+      },
+    };
+  },
+});

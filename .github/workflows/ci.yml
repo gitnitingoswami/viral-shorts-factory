@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:contracts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test -w @vsf/api
+      - run: npm run test -w web -- --watch=false
+      - run: npm run build
+
+  e2e:
+    name: API integration tests (Postgres, Redis, S3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Start dependencies (same compose file as local dev)
+        run: docker compose -f infra/docker/compose.yaml up -d --wait postgres redis
+      - name: Start S3-compatible storage
+        run: |
+          docker compose -f infra/docker/compose.yaml up -d storage
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8333/ && break; sleep 2; done
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:contracts
+      - name: Migrations up/down/up + API e2e + worker
+        run: npm run test:cov -w @vsf/api
+      - if: failure()
+        run: docker compose -f infra/docker/compose.yaml logs --no-color --tail 200
+
+  security:
+    name: Secret scan and dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.0 git /repo --redact --verbose
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: npm audit (high and critical fail the build)
+        run: npm audit --audit-level=high --omit=dev

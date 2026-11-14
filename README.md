@@ -1,72 +1,69 @@
-# Nitin AI Engineer + AI Viral Shorts Factory
+# Viral Shorts Factory
 
-This is one combined Claude Code workspace. It combines:
-- Nitin's general-purpose AI software engineer instructions and task-intake skill.
-- The Viral Shorts Factory Lead Orchestrator.
-- Ten product phases, specialist agents, templates, tracker, and integration guidance.
+Internal tool for researching, writing, producing, reviewing, publishing and measuring short
+programming-tips videos for YouTube Shorts, with human approval at every publishing step.
 
-## Use it in VS Code
+- Product and architecture: [`docs/PRD.md`](docs/PRD.md), [`docs/SYSTEM_ARCHITECTURE.md`](docs/SYSTEM_ARCHITECTURE.md)
+- Delivery status: [`docs/PHASE_TRACKER.md`](docs/PHASE_TRACKER.md), [`docs/TASK_TRACKER.md`](docs/TASK_TRACKER.md)
+- How the AI engineering team works in this repo: [`CLAUDE.md`](CLAUDE.md), [`docs/WORKSPACE_GUIDE.md`](docs/WORKSPACE_GUIDE.md)
 
-1. Extract this ZIP.
-2. Open the extracted `nitin-ai-engineer-viral-shorts` folder in VS Code
-   (`File → Open Folder`).
-3. Install the official Claude Code VS Code extension and sign in to your Claude account.
-4. Open the Claude Code panel. In a terminal, you can also run `claude` if the CLI is installed.
-5. Trust the workspace only after reviewing its files.
-6. Start a new Claude Code conversation in this folder.
-7. Paste the first-run prompt below.
+## Repository layout
 
-## First-run prompt
+```
+apps/api        NestJS API (src/main.ts) and background worker (src/worker.ts): one codebase, two processes
+apps/web        Angular 22 dashboard
+libs/contracts  Shared TypeScript API contract used by both apps
+infra/docker    Docker Compose (Postgres, Redis, S3-compatible storage), Dockerfiles, nginx config
+.github         CI: lint, typecheck, unit tests, build, integration tests, secret scan, dependency audit
+```
 
-Read `CLAUDE.md`, `.claude/agents/lead-orchestrator.md`,
-`docs/PHASE_TRACKER.md`, and `docs/INTEGRATIONS_AND_ACCESS.md`.
+## Prerequisites
 
-You are Nitin AI Engineer and the Lead Orchestrator for this workspace.
-Inspect the repository and Git status. Prepare the Phase 00 plan for the Viral Shorts
-Factory and list the external integrations and OAuth scopes that are missing.
-Do not start external actions before the user has connected the required accounts
-and authorized the initial setup. Once that setup is complete, operate autonomously:
-delegate work, implement, test, fix failures, commit and push to the configured repo,
-and proceed through phases when acceptance criteria pass. Report progress and blockers.
+- **Node.js 24.22.3** (see `.nvmrc`; Angular 22 needs ≥ 22.22.3) and npm 11
+- **Docker Desktop** running
 
-## How to use the same engineer for another project/task
+## Local setup
 
-Open the target repository as the VS Code folder. Copy/merge the root `CLAUDE.md`
-and `.claude/` agent/skill configuration into that repository only after checking for
-conflicts. Then give Claude Code your feature, bug, or project description. The
-`task-intake` skill provides a structured intake workflow; the Lead Orchestrator
-coordinates larger phase-based work.
+```bash
+nvm use                        # or put Node 24.22.3 first on PATH
+npm ci                         # installs all workspaces; native build scripts are allow-listed in package.json
+cp .env.example .env           # then edit: set JWT_ACCESS_SECRET and the BOOTSTRAP_OWNER_* pair
+npm run infra:up               # Postgres :55432, Redis :56379, S3 storage :8333 (non-default ports avoid clashes)
+npm run migration:run          # applies TypeORM migrations to the dev database
+```
 
-## Important: the two layers
+Generate a JWT secret with
+`node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
+On first start, the API creates the owner account from `BOOTSTRAP_OWNER_EMAIL` / `BOOTSTRAP_OWNER_PASSWORD`
+(only when no users exist). Clear those two values afterwards.
 
-- `CLAUDE.md` is the single source of project-wide instructions.
-- `.claude/agents/` contains specialist agents and the orchestrator.
-- `.claude/skills/` contains reusable workflows.
-- `phases/` contains the ten Viral Shorts Factory phase prompts.
-- `docs/PHASE_TRACKER.md` records phase progress.
+## Run
 
-Do not copy two separate root `CLAUDE.md` files into one folder. This combined pack
-already merges the Nitin engineer role with the project orchestrator instructions.
+```bash
+npm run start:api      # http://localhost:3100/api   (Swagger: /api/docs when SWAGGER_ENABLED=true)
+npm run start:worker   # processes background jobs
+npm run start:web      # http://localhost:4200 (proxies /api to :3100)
+```
 
-## Connecting Git, Gmail, and YouTube
+Everything in containers instead: `docker compose -f infra/docker/compose.yaml --profile app up -d --build`
+(dashboard on http://localhost:8080).
 
-Claude Code needs actual integrations/tools for external account actions. Connect them
-through supported OAuth/MCP integrations or an approved provider integration.
-Then verify connections in Claude Code using `/mcp` (for MCP servers) and test only
-the required scopes. The instruction files do not themselves grant access.
+## Quality checks
 
-- Git: configure your Git remote and credential helper or connect an approved Git provider tool.
-- Gmail: connect an authorized Gmail integration with only the scopes needed.
-- YouTube: connect Google/YouTube OAuth with the scopes required by the official API.
-- Keep credentials outside the repository. Never paste passwords or tokens into prompts.
+| Command | What it runs |
+|---|---|
+| `npm run lint` | ESLint (API + web), zero warnings allowed |
+| `npm run typecheck` | Strict TypeScript for contracts, API and web |
+| `npm test` | API unit tests (Jest) + web unit tests (Vitest) |
+| `npm run test:e2e` | API integration tests against the disposable `vsf_test` DB: migrations up/down/up, auth, roles, jobs + worker, audit, rate limiting. Needs `npm run infra:up` |
+| `npm run test:cov -w @vsf/api` | Unit + integration with coverage |
+| `npm run build` | Production builds of all packages |
 
-## Autonomy and permissions
+Integration tests only ever reset a database whose name ends in `_test`.
 
-Use Claude Code's Auto permission mode if available in your version, or configure a
-reviewed allowlist for common development commands. This reduces routine prompts while
-preserving controls. Do not use unrestricted bypass-permissions mode on your everyday
-machine. External services still require their own authorization and may enforce consent,
-MFA, API quotas, and policy limits.
+## Security notes
 
-The AI can autonomously act only through tools it actually has. A written instruction
-cannot create Gmail, YouTube, or GitHub access by itself.
+- Secrets live only in `.env` locally (git-ignored) and in a secret manager in production. Never commit them.
+- Access tokens are kept in memory in the browser. Refresh tokens are HttpOnly, `SameSite=Strict` cookies, rotated on
+  every use, and replaying an old one revokes the whole session family.
+- Every authenticated mutating request and every login/logout/refresh-reuse event is written to an append-only audit log.

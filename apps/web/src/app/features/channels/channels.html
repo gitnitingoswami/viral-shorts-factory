@@ -1,0 +1,74 @@
+<h1 class="page-title">Channels</h1>
+
+@if (isOwner()) {
+  <mat-card appearance="outlined" class="create-card">
+    <mat-card-content>
+      <h2 class="section-title">Add a YouTube channel</h2>
+      <form [formGroup]="form" (ngSubmit)="create()" novalidate class="create-form" aria-label="Add channel">
+        <mat-form-field appearance="outline">
+          <mat-label>Handle</mat-label>
+          <input matInput formControlName="handle" placeholder="@mychannel" required />
+          @if (form.controls.handle.hasError('required')) {
+            <mat-error>Handle is required.</mat-error>
+          } @else if (form.controls.handle.hasError('pattern') || form.controls.handle.hasError('maxlength')) {
+            <mat-error>Use 3–100 letters, digits, dot, dash or underscore.</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Title</mat-label>
+          <input matInput formControlName="title" required />
+          @if (form.controls.title.hasError('required')) {
+            <mat-error>Title is required.</mat-error>
+          } @else if (form.controls.title.hasError('maxlength')) {
+            <mat-error>Title must be at most 100 characters.</mat-error>
+          }
+        </mat-form-field>
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          {{ saving() ? 'Saving…' : 'Add channel' }}
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+}
+
+<section aria-labelledby="channel-list-heading" aria-live="polite">
+  <h2 id="channel-list-heading" class="section-title">Configured channels</h2>
+  @if (loading()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading channels" />
+      <span>Loading channels…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (channels().length === 0) {
+    <p class="state" data-testid="channels-empty">No channels yet.</p>
+  } @else {
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Handle</th>
+            <th scope="col">Platform</th>
+            <th scope="col">Default privacy</th>
+            <th scope="col">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of channels(); track c.id) {
+            <tr>
+              <td>{{ c.title }}</td>
+              <td>{{ c.handle }}</td>
+              <td>{{ c.platform }}</td>
+              <td>{{ c.defaultPrivacy }}</td>
+              <td>{{ c.createdAt | date: 'medium' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
