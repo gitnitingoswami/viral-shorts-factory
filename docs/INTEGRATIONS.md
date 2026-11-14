@@ -20,7 +20,7 @@ All provider facts must be re-verified at the start of the phase that implements
 | Image/video generation (optional) | Backgrounds / title cards | 04 | API key | Optional |
 | Gmail API | Operator notifications (optional) | 08 | Google OAuth `gmail.send` | Optional |
 | Object storage (S3 / Azure Blob / MinIO) | Media assets and renders | 01, 04 | Cloud IAM / local | MinIO locally |
-| GitHub (repo hosting) | Source control, CI | 00+ | SSH key or `gh` auth | **Blocked: auth** |
+| GitHub (repo hosting) | Source control, CI | 00+ | HTTPS keychain credential | Ready |
 
 ## 2. YouTube Data API v3
 Sources: [videos.insert](https://developers.google.com/youtube/v3/docs/videos/insert), [videos resource](https://developers.google.com/youtube/v3/docs/videos), [revision history](https://developers.google.com/youtube/v3/revision_history), [quota calculator](https://developers.google.com/youtube/data/determine_quota_cost).
@@ -117,14 +117,14 @@ A 60-second Short is ~800–1,000 characters, so TTS cost is **< $0.10/video at 
 - Alternative with no extra OAuth: in-app notifications + optional webhook. **Recommended default.**
 
 ## 10. GitHub (source control)
-- Repo: `gitnitingoswami/desktop-tutorial` (provided 2026-11-14).
-- **Blocked:** HTTPS credential invalid; SSH key not registered; `~/.config/gh` owned by root. The user must fix this; the agent will not handle tokens.
+- Repo: `gitnitingoswami/viral-shorts-factory` (private; created 2026-11-14).
+- Access: HTTPS via the macOS keychain credential set up by VS Code (scopes `repo`, `workflow`). `gh` CLI is still unusable (`~/.config/gh` root-owned); the GitHub REST API is used instead.
 - CI (Phase 01): GitHub Actions with no secrets needed for unit tests. Provider integrations are mocked in CI.
 
 ## 11. Credential and setup checklist (user actions)
 | # | Item | Needed by | How |
 |---|---|---|---|
-| 1 | GitHub push access | Now | `sudo chown -R $(whoami) ~/.config/gh && gh auth login && gh auth setup-git`, or add an SSH key |
+| 1 | GitHub push access | Done | Working via VS Code keychain credential |
 | 2 | Docker Desktop running | Phase 01 | Start the app |
 | 3 | GCP project, YouTube Data API v3 + YouTube Analytics API enabled, OAuth consent screen (External/Testing, operator as test user; note the 7-day refresh-token expiry in Testing, §6a), OAuth client (Web), API key restricted to YouTube Data API | Phase 02 | Google Cloud Console |
 | 4 | Anthropic API key with a monthly spend limit | Phase 03 | console.anthropic.com → put it in `.env` locally |

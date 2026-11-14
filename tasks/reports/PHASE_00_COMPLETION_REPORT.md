@@ -55,10 +55,9 @@ The specialist agents in `.claude/agents/` are not registered as subagents in th
 - Git: HTTPS push via the credentials the user configured in VS Code.
 
 ## Git branch / commit
-`phase-00/product-discovery`, pushed to `origin` (`gitnitingoswami/desktop-tutorial`). The remote `main` has unrelated history ("Initial commit") and was not touched.
+`phase-00/product-discovery`, pushed to the new private repo `gitnitingoswami/viral-shorts-factory` (created 2026-11-14 at the user's request); PR into `main`.
 
 ## Risks and known issues
-- The remote repository is GitHub Desktop's `desktop-tutorial` sample with unrelated `main` history. A dedicated repo is recommended before Phase 01 merges.
 - `gh` CLI is still unusable (`~/.config/gh` root-owned), so PRs can't be opened from the CLI.
 - Several facts are [S]/[A] (TTS prices, Stack Exchange/GitHub limits, YouTube data-retention rule) and must be re-verified in the phase that uses them.
 - The Google OAuth "Testing" mode 7-day refresh-token expiry needs a decision in Phase 05.

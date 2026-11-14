@@ -6,10 +6,10 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 ## Setup / blockers
 | ID | Task | Owner | Status | Notes |
 |---|---|---|---|---|
-| S.1 | Initialize Git repo, add remote | Lead Orchestrator | DONE | Local repo on `main` (c4cddaf); remote `origin` = gitnitingoswami/desktop-tutorial; working branch `phase-00/product-discovery` |
+| S.1 | Initialize Git repo, add remote | Lead Orchestrator | DONE | Local repo on `main` (c4cddaf); remote `origin` = gitnitingoswami/viral-shorts-factory (private, created 2026-11-14; old `desktop-tutorial` kept as remote `tutorial`); working branch `phase-00/product-discovery` |
 | S.1b | Push access to GitHub remote | User | DONE | HTTPS works via VS Code credentials (2026-11-14); SSH key still not registered |
 | S.2 | Fix `~/.config/gh` ownership (root-owned) and authenticate `gh` | User | BLOCKED | `sudo chown -R $(whoami) ~/.config/gh && gh auth login` |
-| S.3 | Start Docker daemon | User | TODO | Needed by Phase 01 |
+| S.3 | Start Docker daemon | User | DONE | Docker 29.8.1, Compose v5.5.1 verified 2026-11-14 |
 | S.4 | Install FFmpeg | Lead Orchestrator | TODO | Needed by Phase 04 |
 | S.5 | Resolve phase-gate rule conflict | User | DONE | Approved 2026-11-14: Phase 00 needs user acceptance; Phase 01+ auto-advance on passing criteria |
 | S.7 | YouTube target channel | User | DONE | `@Codehaksy` recorded as target channel; no OAuth connection yet (needed from Phase 02) |

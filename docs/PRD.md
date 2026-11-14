@@ -14,7 +14,7 @@ virality, views, or revenue (see §9).
 ## 1a. Workspace inspection (2026-11-14)
 - **Existing code:** none. The workspace contained only orchestration instructions (`CLAUDE.md`, `APPROVAL_POLICY.md`), 12 specialist agent files, 3 commands, 1 skill, templates, and 10 phase prompts.
 - **Conventions inherited:** from `CLAUDE.md` / `docs/engineering-standards/`: strict TypeScript, NestJS/Angular/PostgreSQL/TypeORM/Redis stack, migrations for every schema change, idempotent jobs, no secrets in Git, feature branches, no force-push.
-- **Constraints found:** Git was not initialized (now initialized, remote `gitnitingoswami/desktop-tutorial`, branch `phase-00/product-discovery`; the remote `main` has unrelated history). FFmpeg is not installed. The Docker daemon is not running. No YouTube/Gmail integration is connected. `gh` CLI config is root-owned. Duplicate agent roles exist (`*-engineer` used as primary).
+- **Constraints found:** Git was not initialized (now initialized, private remote `gitnitingoswami/viral-shorts-factory`, branch `phase-00/product-discovery`). FFmpeg is not installed. The Docker daemon is not running. No YouTube/Gmail integration is connected. `gh` CLI config is root-owned. Duplicate agent roles exist (`*-engineer` used as primary).
 
 ## 2. Approved decisions (2026-11-14)
 | Decision | Value |
