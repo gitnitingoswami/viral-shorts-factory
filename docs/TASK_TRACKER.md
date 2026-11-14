@@ -39,7 +39,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T01.4 | Docker Compose, Dockerfiles, nginx, CI | Lead Orchestrator (devops-engineer role) | DONE | `infra/docker`, `.github/workflows/ci.yml` |
 | T01.5 | Tests: unit + integration incl. migrations up/down/up, worker, concurrency | Lead Orchestrator (qa-engineer role) | DONE | API 66 tests in combined run, 94% lines |
 | T01.6 | Independent code + security review | code-reviewer/security-reviewer (subagent) | DONE | Round 1 RETURN FOR FIXES (5 medium); fixes in `a9ba047` |
-| T01.7 | Completion report | Lead Orchestrator | IN_PROGRESS | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
+| T01.7 | Completion report | Lead Orchestrator | DONE | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
 
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
@@ -53,6 +53,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-07 | 3 moderate npm advisories (typeorm → minimatch), no high/critical | npm audit | Re-check each phase |
 
 ## Change log
+- 2026-11-15 — Phase 01 ACCEPTED (CI 4/4 green on 67ff191; review ACCEPT). PR #2 merged.
 - 2026-11-15 — Phase 01 implemented; review round 1 found 5 medium issues, all fixed with tests; F-01..F-07 tracked.
 - 2026-11-14 — Phase 00 ACCEPTED by the user; phases 01–09 pre-approved on passing criteria. Phase 01 started.
 - 2026-11-14 — Workspace inspected; Phase 00 plan prepared; tracker created.
