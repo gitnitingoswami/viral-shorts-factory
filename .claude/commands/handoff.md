@@ -1,0 +1,1 @@
+Prepare a handoff only if the current phase is explicitly marked ACCEPTED in docs/PHASE_TRACKER.md and the user has approved acceptance. Read the next phase prompt and create a concise handoff using templates/HANDOFF.md. Do not begin implementation of the next phase; ask the user to approve its plan first.

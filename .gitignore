@@ -1,0 +1,32 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*.json
+client_secret*.json
+token*.json
+.oauth/
+
+# OS / editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Build / deps
+node_modules/
+dist/
+coverage/
+.angular/
+
+# Media outputs and local data
+renders/
+media-cache/
+*.mp4
+*.wav
+*.mp3
+
+# Claude Code local settings
+.claude/settings.local.json
