@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "local-dev",
+      "credentials": [{ "accessKey": "vsf_local_access", "secretKey": "vsf_local_secret_only" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

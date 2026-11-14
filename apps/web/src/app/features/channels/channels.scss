@@ -1,0 +1,18 @@
+.create-card {
+  margin-bottom: 24px;
+}
+
+.create-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+
+  mat-form-field {
+    flex: 1 1 220px;
+  }
+
+  button {
+    margin-top: 8px;
+  }
+}

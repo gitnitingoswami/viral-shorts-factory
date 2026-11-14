@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "strictPropertyInitialization": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "types": ["node", "jest"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
+}

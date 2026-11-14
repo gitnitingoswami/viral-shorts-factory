@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/coverage
+**/.angular
+.git
+.env
+.env.*
+!.env.example
+docs
+phases
+tasks
+templates

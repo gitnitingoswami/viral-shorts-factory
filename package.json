@@ -1,0 +1,44 @@
+{
+  "name": "viral-shorts-factory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-assisted YouTube Shorts production pipeline (internal tool)",
+  "engines": {
+    "node": ">=24.22.3 <25"
+  },
+  "packageManager": "npm@11.19.1",
+  "workspaces": [
+    "libs/contracts",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @vsf/contracts && npm run build -w @vsf/api && npm run build -w web",
+    "build:contracts": "npm run build -w @vsf/contracts",
+    "lint": "npm run lint -w @vsf/api && npm run lint -w web --if-present",
+    "typecheck": "npm run build:contracts && npm run typecheck -w @vsf/api && npm run typecheck -w web",
+    "test": "npm run build:contracts && npm run test -w @vsf/api && npm run test -w web -- --watch=false",
+    "test:e2e": "npm run build:contracts && npm run test:e2e -w @vsf/api",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose -f infra/docker/compose.yaml up -d --wait postgres redis storage",
+    "infra:down": "docker compose -f infra/docker/compose.yaml down",
+    "migration:run": "npm run migration:run -w @vsf/api",
+    "migration:revert": "npm run migration:revert -w @vsf/api",
+    "start:api": "npm run start:dev -w @vsf/api",
+    "start:worker": "npm run start:worker:dev -w @vsf/api",
+    "start:web": "npm run start -w web"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.3"
+  },
+  "allowScripts": {
+    "argon2@0.45.2": true,
+    "esbuild@0.28.2": true,
+    "lmdb@3.5.6": true,
+    "msgpackr-extract@3.0.7": true,
+    "@parcel/watcher@2.6.0": true,
+    "@scarf/scarf": false
+  }
+}

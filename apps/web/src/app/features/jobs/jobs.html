@@ -1,0 +1,72 @@
+<div class="page-header">
+  <h1 class="page-title">Jobs</h1>
+  <div class="actions">
+    <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">Refresh</button>
+    @if (isOwner()) {
+      <button mat-flat-button type="button" (click)="enqueuePing()" [disabled]="enqueuing()">
+        {{ enqueuing() ? 'Enqueuing…' : 'Enqueue ping job' }}
+      </button>
+    }
+  </div>
+</div>
+
+<section aria-live="polite" aria-label="Job list">
+  @if (loading() && !page()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading jobs" />
+      <span>Loading jobs…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (page(); as p) {
+    @if (p.items.length === 0) {
+      <p class="state" data-testid="jobs-empty">No jobs yet.</p>
+    } @else {
+      <div class="table-scroll">
+        <table mat-table [dataSource]="p.items" class="jobs-table">
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef scope="col">Type</th>
+            <td mat-cell *matCellDef="let job">{{ job.type }}</td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef scope="col">Status</th>
+            <td mat-cell *matCellDef="let job">
+              <span class="status status-{{ job.status }}">{{ job.status }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="progress">
+            <th mat-header-cell *matHeaderCellDef scope="col">Progress</th>
+            <td mat-cell *matCellDef="let job">
+              <div class="progress">
+                <mat-progress-bar
+                  mode="determinate"
+                  [value]="job.progress"
+                  [attr.aria-label]="'Progress of job ' + job.id"
+                />
+                <span>{{ job.progress }}%</span>
+              </div>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="attempt">
+            <th mat-header-cell *matHeaderCellDef scope="col">Attempt</th>
+            <td mat-cell *matCellDef="let job">{{ job.attempt }} / {{ job.maxAttempts }}</td>
+          </ng-container>
+          <ng-container matColumnDef="createdAt">
+            <th mat-header-cell *matHeaderCellDef scope="col">Created</th>
+            <td mat-cell *matCellDef="let job">{{ job.createdAt | date: 'medium' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="error">
+            <th mat-header-cell *matHeaderCellDef scope="col">Error</th>
+            <td mat-cell *matCellDef="let job" class="error-cell">{{ job.error ?? '—' }}</td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="columns"></tr>
+          <tr mat-row *matRowDef="let row; columns: columns"></tr>
+        </table>
+      </div>
+      <p class="muted">Showing {{ p.items.length }} of {{ p.total }} jobs.</p>
+    }
+  }
+</section>

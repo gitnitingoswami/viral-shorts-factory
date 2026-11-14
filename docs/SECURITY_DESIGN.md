@@ -42,7 +42,7 @@
 | T18 | Repudiation of external actions | R | Append-only `audit_event` with actor, correlation ID, request hash | 01+ |
 
 ## 4. Authentication and authorization
-- App login: email + password (argon2id, memory ≥ 64 MB), access JWT 15 min (EdDSA, key in the secret store), refresh token 7 days, rotated on use with reuse detection → revoke all sessions.
+- App login: email + password (argon2id, memory ≥ 64 MB), access JWT 15 min (Phase 01 implementation: HS256 with a ≥ 32-char secret and enforced issuer/audience; EdDSA re-evaluated in Phase 09, follow-up F-06), refresh token 7 days, rotated on use with reuse detection → revoke all sessions.
 - Roles: `owner` (all actions incl. integrations, budgets, public publishing), `reviewer` (approve scripts/videos, cannot connect accounts or change budgets). Guards on every controller; deny by default.
 - Workers authenticate to nothing user-facing; they have DB/Redis credentials only on the private network.
 

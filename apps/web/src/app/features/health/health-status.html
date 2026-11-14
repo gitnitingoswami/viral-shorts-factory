@@ -1,0 +1,89 @@
+<section class="health" [class.compact]="compact()" aria-labelledby="health-heading">
+  <header class="health-header">
+    <h2 id="health-heading" class="heading">System health</h2>
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="refresh()"
+      [disabled]="loading()"
+      aria-label="Refresh system health"
+    >
+      Refresh
+    </button>
+  </header>
+
+  <div aria-live="polite" aria-atomic="true" class="live">
+    @if (error(); as message) {
+      <p class="state state-error" role="alert" data-testid="health-error">
+        {{ message }}
+      </p>
+    }
+
+    @if (readiness(); as data) {
+      <p class="overall" data-testid="health-overall">
+        Overall:
+        <span class="badge" [class.badge-ok]="data.status === 'ok'" [class.badge-bad]="data.status !== 'ok'">
+          {{ data.status === 'ok' ? 'Operational' : 'Degraded' }}
+        </span>
+        @if (compact() && downCount() > 0) {
+          <span class="muted">({{ downCount() }} of {{ rows().length }} dependencies down)</span>
+        }
+      </p>
+    } @else if (loading()) {
+      <div class="state" role="status">
+        <mat-spinner diameter="24" aria-label="Loading system health" />
+        <span>Loading system health…</span>
+      </div>
+    }
+  </div>
+
+  @if (readiness(); as data) {
+    @if (rows().length === 0) {
+      <p class="state" data-testid="health-empty">No dependency checks were reported.</p>
+    } @else if (!compact()) {
+      <table class="checks" data-testid="health-checks">
+        <caption class="visually-hidden">Dependency checks</caption>
+        <thead>
+          <tr>
+            <th scope="col">Dependency</th>
+            <th scope="col">Status</th>
+            <th scope="col">Latency</th>
+            <th scope="col">Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.name) {
+            <tr [attr.data-dependency]="row.name">
+              <th scope="row">{{ row.label }}</th>
+              <td>
+                <span
+                  class="badge"
+                  [class.badge-ok]="row.check.status === 'up'"
+                  [class.badge-bad]="row.check.status === 'down'"
+                  data-testid="dependency-status"
+                  >{{ row.check.status === 'up' ? 'Up' : 'Down' }}</span
+                >
+              </td>
+              <td>{{ row.check.latencyMs !== undefined ? row.check.latencyMs + ' ms' : '—' }}</td>
+              <td class="error-cell">{{ row.check.error ?? '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <ul class="compact-list">
+        @for (row of rows(); track row.name) {
+          <li [attr.data-dependency]="row.name">
+            {{ row.label }}:
+            <span class="badge" [class.badge-ok]="row.check.status === 'up'" [class.badge-bad]="row.check.status === 'down'">
+              {{ row.check.status === 'up' ? 'Up' : 'Down' }}
+            </span>
+          </li>
+        }
+      </ul>
+    }
+    <p class="muted meta">
+      Version {{ data.version }} · checked {{ data.timestamp | date: 'medium' }}
+    </p>
+  }
+</section>
