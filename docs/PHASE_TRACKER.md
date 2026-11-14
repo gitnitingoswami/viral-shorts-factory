@@ -6,7 +6,7 @@ Status values: `NOT_STARTED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED`, `IN_REVIEW`, 
 |---|---|---|---|---|
 | 00 | Product discovery, PRD & architecture | ACCEPTED (user, 2026-11-14) | Lead Orchestrator | `tasks/reports/PHASE_00_COMPLETION_REPORT.md` |
 | 01 | Project foundation | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
-| 02 | Weekly trend research engine | NOT_STARTED | Lead Orchestrator | — |
+| 02 | Weekly trend research engine | IN_PROGRESS | Lead Orchestrator | — |
 | 03 | AI content strategy and scripts | NOT_STARTED | Lead Orchestrator | — |
 | 04 | AI video production | NOT_STARTED | Lead Orchestrator | — |
 | 05 | Social publishing engine | NOT_STARTED | Lead Orchestrator | — |
