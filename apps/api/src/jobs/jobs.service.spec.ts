@@ -30,7 +30,17 @@ function jobRow(id = 'j1'): JobEntity {
 
 function setup(insertedRows: unknown[], addImpl?: () => Promise<unknown>, existing?: { getState: () => Promise<string>; remove: jest.Mock }) {
   const execute = jest.fn().mockResolvedValue({ raw: insertedRows });
-  const qb = { insert: () => qb, into: () => qb, values: () => qb, orIgnore: () => qb, returning: () => qb, execute };
+  const qb = {
+    insert: () => qb,
+    into: () => qb,
+    values: () => qb,
+    orIgnore: () => qb,
+    returning: () => qb,
+    update: () => qb,
+    set: () => qb,
+    where: () => qb,
+    execute,
+  };
   const repo = {
     createQueryBuilder: () => qb,
     findOneOrFail: jest.fn().mockResolvedValue(jobRow()),

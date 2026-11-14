@@ -40,6 +40,7 @@ export class AuditInterceptor implements NestInterceptor {
         ).pipe(map(() => body));
       }),
       catchError((err: unknown) => {
+        req.auditRecorded = true;
         const statusCode = err instanceof HttpException ? err.getStatus() : 500;
         return from(this.audit.record({ ...base, outcome: 'failure', details: { statusCode } })).pipe(
           concatMap(() => throwError(() => err)),

@@ -46,7 +46,7 @@ npm run start:web      # http://localhost:4200 (proxies /api to :3100)
 ```
 
 Everything in containers instead: `docker compose -f infra/docker/compose.yaml --profile app up -d --build`
-(dashboard on http://localhost:8080).
+(dashboard on http://localhost:8080). The containers run in production mode with `Secure` cookies: use `localhost`/`127.0.0.1` (browsers treat these as secure) or HTTPS. Over plain http on a LAN hostname the session cookie will not be stored.
 
 ## Quality checks
 

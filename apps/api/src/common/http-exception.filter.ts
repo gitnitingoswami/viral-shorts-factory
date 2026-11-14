@@ -60,16 +60,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     let auditDone: Promise<void> = Promise.resolve();
-    if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN || status === HttpStatus.TOO_MANY_REQUESTS) {
-      // Login failures (and refresh reuse) are already audited with richer context by AuthService;
-      // a 401 from refresh without a session is the normal "not signed in" path on page load.
-      const route = (req.route as { path?: string } | undefined)?.path ?? req.path;
-      const alreadyAudited = route === '/api/auth/login' || (route === '/api/auth/refresh' && status === HttpStatus.UNAUTHORIZED);
-      if (!alreadyAudited) {
+    // Audit denials only for authenticated principals (e.g. a reviewer hitting an owner-only route).
+    // Unauthenticated 401/403/429 are logged, not audited: anyone could otherwise flood the append-only
+    // table. Mutating requests by an authenticated user are already audited by AuditInterceptor.
+    const route = (req.route as { path?: string } | undefined)?.path ?? req.path;
+    const isDenial = status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN || status === HttpStatus.TOO_MANY_REQUESTS;
+    if (isDenial && !req.user) {
+      this.logger.warn({ correlationId, status, route, ip: req.ip }, 'Request denied');
+    }
+    if (isDenial && req.user) {
+      // Guard denials never reach the interceptor; errors thrown inside handlers were already audited there.
+      if (!req.auditRecorded) {
         auditDone = this.audit.record({
           actorType: 'user',
-          actorId: req.user?.id ?? null,
-          workspaceId: req.user?.workspaceId,
+          actorId: req.user.id,
+          workspaceId: req.user.workspaceId,
           action: 'http.denied',
           subjectType: 'route',
           subjectId: `${req.method} ${route}`,

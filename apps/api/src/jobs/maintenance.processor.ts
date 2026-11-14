@@ -26,17 +26,24 @@ export class MaintenanceProcessor extends WorkerHost {
 
   async process(job: Job<QueuePayload>): Promise<Record<string, unknown>> {
     const { jobId } = job.data;
-    // Claim: only queued/running(retry) rows not already finished can move to running.
+    // Claim: only unfinished rows with attempts left can move to running (see follow-up F-01 for leases).
     const claimed = await this.repo
       .createQueryBuilder()
       .update()
       .set({ status: 'running', attempt: () => 'attempt + 1', startedAt: () => 'now()', error: null })
-      .where('id = :jobId AND status IN (:...statuses)', { jobId, statuses: ['queued', 'running'] })
+      .where('id = :jobId AND status IN (:...statuses) AND attempt < max_attempts', { jobId, statuses: ['queued', 'running'] })
       .returning(['id', 'type', 'workspace_id'])
       .execute();
     const row = (claimed.raw as Array<{ id: string; type: string; workspace_id: string }>)[0];
     if (!row) {
-      this.logger.warn({ jobId }, 'Job already finished or cancelled; skipping');
+      // Attempts exhausted (e.g. the job kept crashing the worker): fail it instead of retrying forever.
+      await this.repo
+        .createQueryBuilder()
+        .update()
+        .set({ status: 'failed', error: 'Max attempts exhausted', finishedAt: () => 'now()' })
+        .where(`id = :jobId AND status IN ('queued', 'running') AND attempt >= max_attempts`, { jobId })
+        .execute();
+      this.logger.warn({ jobId }, 'Job finished, cancelled or out of attempts; skipping');
       return { skipped: true };
     }
 

@@ -280,6 +280,32 @@ describe('API (e2e)', () => {
       expect(rows[0]).toEqual({ ip: '203.0.113.7', subject_id: 'POST /api/channels' });
     });
 
+    it('does not audit unauthenticated denials (audit log cannot be flooded anonymously)', async () => {
+      const before = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM audit_event`);
+      for (let i = 0; i < 5; i++) await request(http).get('/api/channels').set('Authorization', 'Bearer garbage').expect(401);
+      await request(http).post('/api/auth/logout').expect(403);
+      const after = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM audit_event`);
+      expect(after[0].n).toBe(before[0].n);
+    });
+
+    it('fails a job whose attempts are exhausted instead of retrying forever', async () => {
+      const worker = await createWorker();
+      try {
+        const [row] = await ds.query<Array<{ id: string }>>(
+          `INSERT INTO job (workspace_id, type, queue, idempotency_key, status, attempt, max_attempts, updated_at)
+           VALUES ('00000000-0000-4000-8000-000000000001', 'maintenance.ping', 'maintenance', 'e2e-exhausted', 'queued', 3, 3, now() - interval '5 minutes')
+           RETURNING id`,
+        );
+        const done = await waitFor(async () => {
+          const [j] = await ds.query<Array<{ status: string; error: string }>>(`SELECT status, error FROM job WHERE id = $1`, [row.id]);
+          return j.status === 'failed' ? j : undefined;
+        });
+        expect(done).toEqual({ status: 'failed', error: 'Max attempts exhausted' });
+      } finally {
+        await worker.close();
+      }
+    });
+
     it('recovers jobs without a restart: lost queue messages and abandoned running jobs', async () => {
       const worker = await createWorker();
       try {

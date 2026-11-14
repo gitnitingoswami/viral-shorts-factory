@@ -11,6 +11,8 @@ export interface AuthUser {
 
 export interface AuthedRequest extends Request {
   user?: AuthUser;
+  /** Set by AuditInterceptor when it has already audited this request's failure. */
+  auditRecorded?: boolean;
 }
 
 export const IS_PUBLIC_KEY = 'vsf:isPublic';

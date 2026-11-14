@@ -112,6 +112,12 @@ export class JobsService {
    * Safe to run repeatedly: BullMQ ignores a jobId that already exists.
    */
   async reconcileQueued(olderThanMs = 30_000): Promise<number> {
+    await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'failed', error: 'Max attempts exhausted', finishedAt: () => 'now()' })
+      .where(`status = 'queued' AND attempt >= max_attempts`)
+      .execute();
     const stale = await this.repo.find({
       where: { status: In(['queued']), updatedAt: LessThan(new Date(Date.now() - olderThanMs)) },
       take: 500,
