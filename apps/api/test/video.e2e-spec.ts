@@ -364,7 +364,7 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
   }, 180_000);
 
   it('fails fast without retries when FFmpeg is missing (non-retryable)', async () => {
-    const pipeline = worker.get(VideoPipeline) as unknown as { bins: { ffmpeg: string } };
+    const pipeline = worker.get<VideoPipeline, { bins: { ffmpeg: string } }>(VideoPipeline);
     const original = pipeline.bins.ffmpeg;
     pipeline.bins.ffmpeg = '/nonexistent/ffmpeg';
     try {
