@@ -31,6 +31,7 @@
     "@nestjs/swagger": "^12.1.2",
     "@nestjs/throttler": "^6.7.1",
     "@nestjs/typeorm": "^12.0.3",
+    "@resvg/resvg-js": "^2.6.2",
     "@vsf/contracts": "0.1.0",
     "argon2": "^0.45.2",
     "bullmq": "^6.7.6",

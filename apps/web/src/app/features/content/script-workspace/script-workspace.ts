@@ -3,11 +3,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   OnInit,
+  afterNextRender,
   computed,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -42,6 +46,7 @@ import { ReviewPanel } from './review-panel';
 import { ScriptDecision } from './script-decision';
 import { ScriptEditor } from './script-editor';
 import { Storyboard } from './storyboard';
+import { StartRenderForm } from '../../video/start-render/start-render-form';
 
 @Component({
   selector: 'app-script-workspace',
@@ -58,6 +63,7 @@ import { Storyboard } from './storyboard';
     ReviewPanel,
     ScriptDecision,
     ScriptEditor,
+    StartRenderForm,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './script-workspace.html',
@@ -70,6 +76,9 @@ export class ScriptWorkspace implements OnInit {
   private versionRequest: Subscription | null = null;
   private checksPoll: Subscription | null = null;
   private jobPoll: Subscription | null = null;
+  private readonly injector = inject(Injector);
+  private readonly confirmYes = viewChild('confirmYes', { read: ElementRef<HTMLButtonElement> });
+  private readonly rerunBtn = viewChild('rerunBtn', { read: ElementRef<HTMLButtonElement> });
 
   /** Script id (route param). */
   readonly id = input.required<string>();
@@ -87,6 +96,16 @@ export class ScriptWorkspace implements OnInit {
   protected readonly editing = signal(false);
   protected readonly rerunning = signal(false);
   protected readonly announcement = signal('');
+  protected readonly renderOpen = signal(false);
+  /** F-12: re-running checks clears overrides, so confirm first when any exist. */
+  protected readonly confirmRerun = signal(false);
+  protected readonly overrideCount = computed(() => {
+    const v = this.version();
+    return v
+      ? v.claims.filter((c) => c.verdict === 'overridden').length +
+          v.codeChecks.filter((c) => c.status === 'overridden').length
+      : 0;
+  });
 
   protected readonly isOwner = this.auth.isOwner;
   protected readonly canReview = computed(() => this.auth.hasRole(['owner', 'reviewer']));
@@ -171,6 +190,7 @@ export class ScriptWorkspace implements OnInit {
   }
 
   protected loadVersion(version: number): void {
+    this.confirmRerun.set(false);
     this.stopChecksPolling();
     this.versionRequest?.unsubscribe();
     this.selectedVersion.set(version);
@@ -189,7 +209,22 @@ export class ScriptWorkspace implements OnInit {
     });
   }
 
+  protected requestRerun(): void {
+    if (this.overrideCount() > 0) {
+      this.confirmRerun.set(true);
+      afterNextRender(() => this.confirmYes()?.nativeElement.focus(), { injector: this.injector });
+    } else {
+      this.rerunChecks();
+    }
+  }
+
+  protected cancelRerun(): void {
+    this.confirmRerun.set(false);
+    this.rerunBtn()?.nativeElement.focus();
+  }
+
   protected rerunChecks(): void {
+    this.confirmRerun.set(false);
     const v = this.version();
     if (!v || this.rerunning()) {
       return;

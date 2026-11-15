@@ -8,7 +8,7 @@ Status values: `NOT_STARTED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED`, `IN_REVIEW`, 
 | 01 | Project foundation | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
 | 02 | Weekly trend research engine | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_02_COMPLETION_REPORT.md` |
 | 03 | AI content strategy and scripts | ACCEPTED (criteria passed; user pre-approval; live LLM run pending credits) | Lead Orchestrator | `tasks/reports/PHASE_03_COMPLETION_REPORT.md` |
-| 04 | AI video production | NOT_STARTED | Lead Orchestrator | — |
+| 04 | AI video production | ACCEPTED (criteria passed; user pre-approval; production voice pending user's TTS choice) | Lead Orchestrator | `tasks/reports/PHASE_04_COMPLETION_REPORT.md` |
 | 05 | Social publishing engine | NOT_STARTED | Lead Orchestrator | — |
 | 06 | Analytics and performance | NOT_STARTED | Lead Orchestrator | — |
 | 07 | Monetization and finance | NOT_STARTED | Lead Orchestrator | — |
@@ -23,3 +23,4 @@ Only one phase may be `IN_PROGRESS` at a time. Phase 00 moves to `ACCEPTED` only
 - 2026-11-15 — Phase 01 accepted: 8/8 criteria pass with evidence; independent review ACCEPT (round 2); GitHub CI green on 67ff191 (4/4 jobs).
 - 2026-11-15 — Phase 02 accepted: 9/9 criteria pass with evidence; independent review ACCEPT (round 2); GitHub CI green on 2b2e294 (4/4 jobs); live run 5/5 sources incl. YouTube.
 - 2026-11-15 — Phase 03 accepted: 5/5 criteria pass with evidence; independent review ACCEPT (round 3); GitHub CI green on 24e8398 (4/4). Live Claude verification (F-14) pending Anthropic credits.
+- 2026-11-15 — Phase 04 accepted: 5/5 criteria pass with evidence; independent review round 2 blockers fixed (L1 verified against pino-http); GitHub CI green on f74c614 (4/4). Cloud TTS (production voice) pending the user's provider choice.

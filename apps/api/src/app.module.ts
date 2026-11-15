@@ -20,6 +20,7 @@ import { UsersModule } from './users/users.module';
 import { BudgetModule } from './budget/budget.module';
 import { ResearchModule } from './research/research.module';
 import { ContentModule } from './content/content.module';
+import { VideoModule } from './video/video.module';
 
 /** HTTP API process. */
 @Module({
@@ -45,6 +46,7 @@ import { ContentModule } from './content/content.module';
     BudgetModule,
     ResearchModule,
     ContentModule,
+    VideoModule,
   ],
   controllers: [HealthController],
   providers: [

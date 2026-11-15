@@ -4,8 +4,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { ScriptDetailDto, ScriptVersionDto, UserRole } from '@vsf/contracts';
 import {
+  makeApprovedScript,
   makeJob,
   makeLlmStatus,
+  makeRenderCapability,
+  makeVoice,
   makeScriptDetail,
   makeVersion,
   signInAs,
@@ -262,5 +265,57 @@ describe('ScriptWorkspace', () => {
     expect(q('[data-testid="script-editor"]')).toBeNull();
     expect(q('h1')?.textContent).toContain('New title');
     expect((q('[data-testid="version-picker"]') as HTMLSelectElement).options.length).toBe(3);
+  });
+
+  it('F-12: asks for confirmation before re-running checks when overrides exist; cancel does not call the API', () => {
+    const v = makeVersion();
+    create('owner', makeVersion({ claims: [{ ...v.claims[0], verdict: 'overridden', overrideReason: 'Checked docs manually' }] }));
+    click('[data-testid="rerun-checks"]');
+    const dialog = q('[data-testid="confirm-rerun"]') as HTMLElement;
+    expect(dialog.getAttribute('role')).toBe('alertdialog');
+    expect(dialog.textContent).toContain('clears the 1 existing override(s)');
+    expect(dialog.textContent).toContain('must be');
+    httpMock.expectNone(`${V2}/checks`);
+    click('[data-testid="confirm-rerun-no"]');
+    expect(q('[data-testid="confirm-rerun"]')).toBeNull();
+    httpMock.expectNone(`${V2}/checks`);
+
+    click('[data-testid="rerun-checks"]');
+    click('[data-testid="confirm-rerun-yes"]');
+    httpMock.expectOne(`${V2}/checks`).flush(makeJob({ id: 'j6' }));
+    fixture.detectChanges();
+    expect(q('[data-testid="confirm-rerun"]')).toBeNull();
+    vi.advanceTimersByTime(CHECKS_POLL_INTERVAL_MS);
+    httpMock.expectOne(V2).flush(makeVersion());
+  });
+
+  it('F-12: overridden code checks also require confirmation', () => {
+    const v = makeVersion();
+    create('owner', makeVersion({ codeChecks: [{ ...v.codeChecks[0], status: 'overridden', overrideReason: 'Ran locally' }] }));
+    click('[data-testid="rerun-checks"]');
+    expect(q('[data-testid="confirm-rerun"]')).not.toBeNull();
+    httpMock.expectNone(`${V2}/checks`);
+  });
+
+  it('owner sees "Render video" on approved scripts and it opens the render form preselected', () => {
+    create('owner', makeVersion(), makeScriptDetail({ status: 'approved', approvedVersion: 2 }));
+    click('[data-testid="render-video"]');
+    httpMock
+      .expectOne((r) => r.url === '/api/content/scripts' && r.params.get('status') === 'approved')
+      .flush({ items: [makeApprovedScript()], total: 1, limit: 200, offset: 0 });
+    httpMock.expectOne('/api/video/voices').flush([makeVoice()]);
+    httpMock.expectOne('/api/video/status').flush(makeRenderCapability());
+    fixture.detectChanges();
+    expect((q('[data-testid="render-script"]') as HTMLSelectElement).value).toBe('sc1');
+  });
+
+  it('hides "Render video" for unapproved scripts', () => {
+    create('owner');
+    expect(q('[data-testid="render-video"]')).toBeNull();
+  });
+
+  it('hides "Render video" for reviewers', () => {
+    create('reviewer', makeVersion(), makeScriptDetail({ status: 'approved', approvedVersion: 2 }));
+    expect(q('[data-testid="render-video"]')).toBeNull();
   });
 });

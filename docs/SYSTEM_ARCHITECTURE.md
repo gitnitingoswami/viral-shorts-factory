@@ -148,3 +148,17 @@ Recorded deviations and refinements from the Phase 00 design:
 | IDs | App-generated UUIDv7 | `gen_random_uuid()` (v4) | Postgres 17 lacks native v7; revisit if index locality matters |
 | Queue isolation | n/a | `QUEUE_PREFIX` per environment | Dev and test workers sharing one Redis must not consume each other's jobs |
 | Rate limiting | Login limits | 120 req/min global, 5/min login, 30/min refresh; `THROTTLE_ENABLED` must stay true in production | |
+
+## 13. Phase 04 implementation decisions (2026-11-15)
+| Topic | Phase 00 design (§7) | Implemented | Reason |
+|---|---|---|---|
+| Code frames | Shiki → HTML → PNG, typing animation | Own SVG layout (monospace metrics) + minimal highlighter → PNG via resvg (`@resvg/resvg-js`) with bundled JetBrains Mono (OFL); static frames per caption cue | No headless browser in the worker; deterministic, content-addressed frames; exact caption bounds from monospace metrics. Typing animation deferred |
+| Captions | TTS word timings / forced alignment, burned-in ASS | Cues timed proportionally to text length across the measured speech; burned into frames (safe area 90–950 × 1190–1440 at 1080×1920) + WebVTT sidecar | No libass dependency; word timings arrive with a production TTS provider |
+| Narration | Cloud TTS | `TtsProvider` interface; local eSpeak NG (draft voice, flagged by QC) and a mock tone (tests; fails QC). Cloud TTS = user decision (new integration) | Pipeline is fully testable without credentials |
+| Transitions | Per storyboard | Cuts, plus fade-in/out of the whole video. `fade`/`slide`/`zoom` are recorded and reported as a QC warning | v1 scope |
+| Render jobs | `render_job` table | Rows in `job` (type `video.render`) on a dedicated `render` queue; `video_production.job_id` points to the current attempt | Reuses lease/heartbeat/reconcile machinery |
+| Idempotency | — | Production unique per (script version, settings hash, voice); assets unique per (workspace, kind, sha256) with input cache keys; one `video_version` per (production, job) | Retries and duplicate requests never duplicate records or regenerate finished assets |
+| Cancellation | — | `cancel_requested` flag; the render poll (2 s) aborts the pipeline and SIGKILLs FFmpeg/TTS children | Bounded stop time |
+| Preview | Presigned storage URL | API-signed (HMAC, HKDF-derived key, 15 min) `/api/video/media/:id` with HTTP Range, streamed from storage | Storage is not exposed publicly; works behind nginx |
+| Music | Optional licensed bed | Not used (no licensed music source yet) | Rights first |
+

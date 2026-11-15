@@ -64,6 +64,18 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T03.6 | Live generation with Claude | User (Anthropic credits) | BLOCKED | Key configured and valid; API returns "credit balance is too low" — add credits in console.anthropic.com |
 | T03.7 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review ACCEPT (round 3); CI 4/4 on 24e8398 |
 
+## Phase 04 — AI video production
+| ID | Task | Owner | Status | Output |
+|---|---|---|---|---|
+| T04.1 | Tooling: FFmpeg 9, eSpeak NG (local), OFL font assets, resvg frame renderer | Lead Orchestrator (devops role) | DONE | `apps/api/assets/fonts` (OFL.txt) |
+| T04.2 | Data model: voice profiles, media assets (rights NOT NULL), productions, scenes, versions, quality reports | Lead Orchestrator (database-engineer role) | DONE | migration `VideoProduction` |
+| T04.3 | Render pipeline: TTS → audio → frames → FFmpeg → captions → QC, on the `render` queue (leased, cancellable, idempotent) | Lead Orchestrator (backend-engineer role) | DONE | `apps/api/src/video/` |
+| T04.4 | API: productions, cancel/retry, assets, signed media streaming | Lead Orchestrator | DONE | `video.controller.ts` |
+| T04.5 | Angular: production queue, preview, asset library, quality report; F-12 re-run warning | frontend-engineer (subagent) | DONE | `apps/web/src/app/features/video` (177 web tests) |
+| T04.6 | Worker image + CI: ffmpeg/espeak-ng, fonts | Lead Orchestrator (devops role) | DONE | Dockerfile, ci.yml |
+| T04.7 | Cloud TTS provider | User (choose provider + credential) | BLOCKED | Draft eSpeak voice until chosen |
+| T04.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review round 2 blockers fixed; CI green; `tasks/reports/PHASE_04_COMPLETION_REPORT.md` |
+
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
 |---|---|---|---|
@@ -77,10 +89,15 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-08 | Scoring fairness: topics outside the YouTube-checked top 15 lose the competition weight via confidence shrinkage; consider excluding it from confidence for unchecked topics | Phase 02 review suggestion | 06 (analytics calibration) |
 | F-10 | YouTube daily cap is read-then-record; several concurrent workers could slightly exceed it. Use an atomic reservation when workers scale out | Phase 02 review round 2 | 08 |
 | F-11 | Dedicated sandbox-runner service so containerized workers never need Docker access (today: docker CLI on the worker host; compose workers report `unavailable`) | Phase 03 / SECURITY_DESIGN T7 | 09 |
-| F-12 | Re-running checks clears earlier claim/code overrides (audit keeps them): warn in the UI before re-run, or carry overrides forward by claim text | Phase 03 review suggestion | 04 |
+| F-12 | Re-running checks clears earlier claim/code overrides (audit keeps them): warn in the UI before re-run, or carry overrides forward by claim text | Phase 03 review suggestion | **DONE in Phase 04** (confirmation before re-run) |
 | F-13 | Stream the 32k-token script call (`finalMessage()`); system prompts are below the cache minimum (cache_control is a no-op until prompts grow) | Phase 03 review suggestion | 08 |
 | F-14 | Live Claude smoke test (ideas → script → checks) and cost check once `ANTHROPIC_API_KEY` is configured | Phase 03 | When key provided |
 | F-15 | If a check job's final attempt fails before it is ever claimed (e.g. DB error during claim), states can stay `pending`; have the reconciler fail orphaned pending check runs | Phase 03 review round 3 | 08 |
+| F-16 | Cloud TTS provider with word timestamps (exact caption timing); production voice → `publishable` | Phase 04 | When the user chooses a provider |
+| F-17 | Transitions (fade/slide/zoom) and code typing animation (rendered as cuts today, reported as a QC warning) | Phase 04 | 08 |
+| F-18 | Deduplicated assets record only the first producer's provenance; add per-use provenance on `production_asset` | Phase 04 review L12 | 08 |
+| F-19 | Overall render deadline cannot interrupt in-flight storage/DB awaits: add S3/DB call timeouts | Phase 04 review round 2 | 09 |
+| F-20 | Licensed music bed (needs a licensed music source) | Phase 04 | 05+ |
 | F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log

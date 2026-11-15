@@ -5,9 +5,10 @@ import { AuthAndAuditHardening1763240000000 } from './migrations/1763240000000-A
 import { TrendResearch1763330000000 } from './migrations/1763330000000-TrendResearch';
 import { ResearchReviewFixes1763340000000 } from './migrations/1763340000000-ResearchReviewFixes';
 import { ContentScripts1763350000000 } from './migrations/1763350000000-ContentScripts';
+import { VideoProduction1763360000000 } from './migrations/1763360000000-VideoProduction';
 
 /** Ordered list of migrations. Add new migrations here (explicit list, no glob, so builds and tests agree). */
-export const MIGRATIONS = [InitialSchema1763150000000, AuthAndAuditHardening1763240000000, TrendResearch1763330000000, ResearchReviewFixes1763340000000, ContentScripts1763350000000];
+export const MIGRATIONS = [InitialSchema1763150000000, AuthAndAuditHardening1763240000000, TrendResearch1763330000000, ResearchReviewFixes1763340000000, ContentScripts1763350000000, VideoProduction1763360000000];
 
 export interface DbSettings {
   host: string;

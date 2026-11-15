@@ -1,0 +1,262 @@
+<p class="visually-hidden" aria-live="polite" data-testid="detail-announcement">{{ announcement() }}</p>
+
+@if (loading()) {
+  <div class="state" role="status">
+    <mat-spinner diameter="24" aria-label="Loading production" />
+    <span>Loading production…</span>
+  </div>
+} @else if (error(); as message) {
+  <div class="state state-error" role="alert">
+    <span>{{ message }}</span>
+    <button mat-stroked-button type="button" (click)="load()">Retry</button>
+  </div>
+} @else if (production(); as p) {
+  <div class="page-header">
+    <h1 class="page-title">{{ p.scriptTitle || 'Untitled script' }}</h1>
+    <div class="actions">
+      <a mat-stroked-button routerLink="/video">All productions</a>
+      <a mat-stroked-button [routerLink]="['/content/scripts', p.scriptId]">Script</a>
+      @if (isOwner() && canCancel(p)) {
+        <button mat-stroked-button type="button" data-testid="cancel-production" [disabled]="busy()" (click)="cancel()">
+          Cancel render
+        </button>
+      }
+      @if (isOwner() && canRetry(p)) {
+        <button mat-flat-button type="button" data-testid="retry-production" [disabled]="busy()" (click)="retry()">
+          Retry render
+        </button>
+      }
+    </div>
+  </div>
+
+  <section class="status-panel" aria-label="Render status" data-testid="production-header">
+    <span class="chip chip-{{ p.status }}" data-testid="production-status-chip">{{ statusLabels[p.status] }}</span>
+    @if (p.cancelRequested && isActive(p)) {
+      <span class="muted">Cancel requested</span>
+    }
+    <span>{{ stageLabels[p.stage] }}</span>
+    <div class="progress">
+      <mat-progress-bar mode="determinate" [value]="p.progress" aria-label="Render progress" />
+      <span data-testid="production-progress">{{ p.progress }}%</span>
+    </div>
+    <span class="muted small">
+      Script v{{ p.scriptVersion }} · voice {{ p.voiceName }} · {{ p.settings.width }}×{{ p.settings.height }} ·
+      {{ p.settings.fps }} fps · captions {{ p.settings.burnCaptions ? 'burned in' : 'as a track only' }} · attempt
+      {{ p.renderAttempt }} · created {{ p.createdAt | date: 'medium' }}
+    </span>
+    @if (isActive(p)) {
+      <span class="muted small" role="status">Refreshing automatically while rendering.</span>
+    }
+  </section>
+
+  @if (p.error) {
+    <div class="failure" role="alert" data-testid="production-error">
+      <h2 class="section-title">Render {{ statusLabels[p.status].toLowerCase() }}</h2>
+      <p>{{ p.error }}</p>
+    </div>
+  }
+
+  @if (p.status === 'quality_failed' || quality()?.passed === false) {
+    <section class="failure" aria-labelledby="not-publishable-heading" data-testid="quality-failures">
+      <h2 id="not-publishable-heading" class="section-title">
+        <span aria-hidden="true">✕ </span>Not publishable: quality checks failed
+      </h2>
+      <ul>
+        @for (f of quality()?.failures ?? []; track $index) {
+          <li>{{ f }}</li>
+        } @empty {
+          @for (c of failedChecks(); track c.id) {
+            <li>{{ c.label }}: {{ c.detail }}</li>
+          } @empty {
+            <li>The latest render did not pass the quality gate.</li>
+          }
+        }
+      </ul>
+    </section>
+  }
+
+  @if (versionsDesc().length === 0) {
+    <p class="state" data-testid="no-video">
+      @if (isActive(p)) {
+        The video appears here when rendering finishes.
+      } @else {
+        No video was produced.
+      }
+    </p>
+  } @else if (version(); as v) {
+    <div class="player-layout">
+      <section class="player" aria-labelledby="preview-heading">
+        <div class="section-head">
+          <h2 id="preview-heading" class="section-title">Preview</h2>
+          @if (versionsDesc().length > 1) {
+            <label class="picker">
+              <span>Version</span>
+              <select data-testid="video-version-picker" [value]="v.version" (change)="onVersionPick($event)">
+                @for (opt of versionsDesc(); track opt.version) {
+                  <option [value]="opt.version" [selected]="opt.version === v.version">
+                    v{{ opt.version }}{{ opt.quality ? (opt.quality.passed ? ' · passed' : ' · failed QA') : '' }}
+                  </option>
+                }
+              </select>
+            </label>
+          } @else {
+            <span class="muted">v{{ v.version }}</span>
+          }
+        </div>
+        @if (urls(); as u) {
+          @if (u.video) {
+            <div class="frame">
+              <video
+                #player
+                controls
+                playsinline
+                preload="metadata"
+                data-testid="video-player"
+                [src]="u.video"
+                [attr.poster]="u.poster"
+                [attr.aria-label]="'Video preview, version ' + v.version"
+                (error)="onMediaError(player)"
+                (loadedmetadata)="onMetadata(player)"
+              >
+                @if (u.captions) {
+                  <track kind="captions" srclang="en" label="English" default [src]="u.captions" data-testid="captions-track" />
+                }
+              </video>
+            </div>
+          }
+        } @else {
+          <div class="state" role="status">
+            <mat-spinner diameter="20" aria-label="Loading video" />
+            <span>Loading video…</span>
+          </div>
+        }
+        @if (urlError(); as message) {
+          <p class="state-error" role="alert">{{ message }}</p>
+        }
+        <p class="muted small" data-testid="version-meta">
+          {{ formatMs(v.durationMs) }} · {{ v.width }}×{{ v.height }} · {{ v.fps }} fps · {{ v.codec }} ·
+          {{ v.bitrateKbps }} kbps · {{ formatBytes(v.bytes) }} ·
+          <span [attr.title]="v.sha256">sha256 {{ shortHash(v.sha256) }}</span>
+        </p>
+      </section>
+
+      <section class="panel quality" aria-labelledby="quality-heading" data-testid="quality-report">
+        <h2 id="quality-heading" class="section-title">Quality report (v{{ v.version }})</h2>
+        @if (quality(); as q) {
+          <p [class]="q.passed ? 'ready' : 'failed-text'" data-testid="quality-verdict">
+            <span aria-hidden="true">{{ q.passed ? '✓ ' : '✕ ' }}</span>
+            {{ q.passed ? 'All required checks passed.' : 'Failed: ' + q.failures.length + ' blocking issue(s).' }}
+          </p>
+          @if (q.passed && !q.publishable) {
+            <p class="failed-text" data-testid="publish-gate">
+              <span aria-hidden="true">⚠ </span>Not publishable yet: narrated with a draft or test voice. Re-render with a production voice before
+              publishing.
+            </p>
+          }
+          <ul class="checks">
+            @for (c of q.checks; track c.id) {
+              <li [attr.data-quality-check]="c.id" [class]="'check check-' + c.status">
+                <span class="chip chip-{{ c.status }}" data-testid="check-status">
+                  <span aria-hidden="true">{{ checkLabels[c.status].icon }}&nbsp;</span>{{ checkLabels[c.status].text }}
+                </span>
+                <span class="check-label">{{ c.label }}</span>
+                <span class="check-detail">{{ c.detail }}</span>
+                @if (c.measured !== null || c.expected !== null) {
+                  <span class="muted small">
+                    Measured: {{ c.measured ?? '—' }} · Expected: {{ c.expected ?? '—' }}
+                  </span>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="muted">No quality report for this version yet.</p>
+        }
+      </section>
+    </div>
+  }
+
+  <section class="panel" aria-labelledby="timeline-heading">
+    <h2 id="timeline-heading" class="section-title">Scene timeline ({{ p.scenes.length }} scenes)</h2>
+    @if (p.scenes.length === 0) {
+      <p class="muted">Scenes appear after narration is synthesized.</p>
+    } @else {
+      <ol class="timeline" data-testid="scene-timeline">
+        @for (s of p.scenes; track s.index) {
+          <li [attr.data-scene]="s.index">
+            <div class="scene-head">
+              <strong>Scene {{ s.index + 1 }}</strong>
+              <span class="muted">{{ formatMs(s.startMs) }}–{{ formatMs(s.endMs) }}</span>
+              <span class="muted">transition: {{ s.transition }}</span>
+            </div>
+            <p><span class="muted">Narration:</span> {{ s.narration }}</p>
+            @if (s.onScreenText) {
+              <p><span class="muted">On screen:</span> {{ s.onScreenText }}</p>
+            }
+            @if (s.captions.length) {
+              <details>
+                <summary>Captions ({{ s.captions.length }} cues)</summary>
+                <ul class="cues">
+                  @for (c of s.captions; track $index) {
+                    <li>
+                      <span class="muted">{{ formatMs(c.startMs) }}–{{ formatMs(c.endMs) }}</span>
+                      {{ c.lines.length ? c.lines.join(' / ') : c.text }}
+                    </li>
+                  }
+                </ul>
+              </details>
+            }
+          </li>
+        }
+      </ol>
+    }
+  </section>
+
+  <section class="panel" aria-labelledby="assets-heading">
+    <h2 id="assets-heading" class="section-title">Assets used ({{ p.assets.length }})</h2>
+    @if (p.assets.length === 0) {
+      <p class="muted">No assets linked yet.</p>
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table" data-testid="production-assets">
+          <thead>
+            <tr>
+              <th scope="col">Role</th>
+              <th scope="col">Kind</th>
+              <th scope="col">License</th>
+              <th scope="col">Source</th>
+              <th scope="col">Creator / provider</th>
+              <th scope="col">Usage rights</th>
+              <th scope="col">Size</th>
+              <th scope="col">SHA-256</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of p.assets; track a.id + a.role + (a.sceneIndex ?? '')) {
+              <tr [attr.data-asset]="a.id">
+                <th scope="row">
+                  {{ a.role }}{{ a.sceneIndex !== null ? ' · scene ' + (a.sceneIndex + 1) : '' }}
+                </th>
+                <td>{{ kindLabels[a.kind] }}{{ a.generated ? ' (generated)' : '' }}</td>
+                <td>
+                  @if (a.licenseUrl && safeHref(a.licenseUrl); as href) {
+                    <a [href]="href" target="_blank" rel="noopener noreferrer" data-testid="license-link">
+                      {{ a.license }}<span class="visually-hidden"> (opens in a new tab)</span>
+                    </a>
+                  } @else {
+                    {{ a.license }}
+                  }
+                </td>
+                <td class="wrap">{{ a.source }}</td>
+                <td>{{ a.creatorOrProvider }}</td>
+                <td class="wrap">{{ a.usageRights }}</td>
+                <td>{{ formatBytes(a.bytes) }}</td>
+                <td><code [attr.title]="a.sha256">{{ shortHash(a.sha256) }}</code></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+}

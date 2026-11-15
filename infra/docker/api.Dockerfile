@@ -13,12 +13,16 @@ RUN npm run build -w @vsf/contracts && npm run build -w @vsf/api \
 
 FROM node:24.22.3-alpine AS runtime
 ENV NODE_ENV=production
+# Video production (Phase 04): FFmpeg for composition/QC, eSpeak NG for the local draft voice.
+RUN apk add --no-cache ffmpeg espeak-ng
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/libs/contracts/package.json ./libs/contracts/package.json
 COPY --from=build --chown=node:node /app/libs/contracts/dist ./libs/contracts/dist
 COPY --from=build --chown=node:node /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build --chown=node:node /app/apps/api/dist ./apps/api/dist
+# Bundled, licensed fonts used by the frame renderer (SIL OFL 1.1; see assets/fonts/OFL.txt).
+COPY --from=build --chown=node:node /app/apps/api/assets ./apps/api/assets
 USER node
 WORKDIR /app/apps/api
 EXPOSE 3100

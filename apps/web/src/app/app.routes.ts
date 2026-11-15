@@ -44,6 +44,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/content/content.routes').then((m) => m.CONTENT_ROUTES),
       },
       {
+        path: 'video',
+        loadChildren: () => import('./features/video/video.routes').then((m) => m.VIDEO_ROUTES),
+      },
+      {
         path: 'audit',
         title: 'Audit log · Viral Shorts Factory',
         canActivate: [roleGuard],
