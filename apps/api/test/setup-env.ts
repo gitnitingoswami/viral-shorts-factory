@@ -31,6 +31,11 @@ env.YOUTUBE_API_KEY = 'AIzaFAKE-test-key-0123456789';
 env.GITHUB_RESEARCH_TOKEN = '';
 env.RESEARCH_RSS_FEEDS = 'https://nodejs.org/en/feed/blog.xml';
 env.RESEARCH_CRON = '0 6 * * 1';
+// Never call a real LLM from tests, even if a developer has ANTHROPIC_API_KEY in .env.
+env.ANTHROPIC_API_KEY = '';
+env.LLM_FORCE_MOCK = 'true';
+env.CODE_SANDBOX = 'docker';
+env.CODE_SANDBOX_TIMEOUT_MS = '8000';
 env.SWAGGER_ENABLED = 'false';
 env.BOOTSTRAP_OWNER_EMAIL = '';
 env.BOOTSTRAP_OWNER_PASSWORD = '';

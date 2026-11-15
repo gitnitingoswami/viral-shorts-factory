@@ -1,0 +1,148 @@
+<div class="page-header">
+  <h1 class="page-title">
+    Content ideas
+    @if (topicTitle(); as tt) {
+      <span class="muted subtitle">for “{{ tt }}”</span>
+    }
+  </h1>
+  <div class="actions">
+    @if (topicId()) {
+      <a mat-stroked-button [routerLink]="['/research/topics', topicId()]">Back to topic</a>
+      <a mat-stroked-button routerLink="/content/ideas">All ideas</a>
+    }
+    <a mat-stroked-button routerLink="/content/scripts">Scripts</a>
+  </div>
+</div>
+
+<app-mock-banner />
+
+<div class="filters">
+  <label for="idea-status">Status</label>
+  <select id="idea-status" data-testid="idea-status" [value]="status()" (change)="onStatus($event)">
+    <option value="">All</option>
+    <option value="proposed">Proposed</option>
+    <option value="selected">Selected</option>
+    <option value="discarded">Discarded</option>
+  </select>
+</div>
+
+<p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+@if (actionError(); as e) {
+  <p class="state state-error" role="alert" data-testid="action-error">{{ e }}</p>
+}
+
+<section aria-label="Idea list">
+  @if (loading() && !page()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading ideas" />
+      <span>Loading ideas…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (page(); as p) {
+    @if (p.items.length === 0) {
+      <p class="state" data-testid="ideas-empty">
+        No ideas yet. Approve a topic in Research and use “Generate ideas”.
+      </p>
+    } @else {
+      <ul class="cards">
+        @for (idea of p.items; track idea.id) {
+          <li class="card" [id]="'idea-' + idea.id" [attr.data-idea]="idea.id">
+            <article [attr.aria-labelledby]="'idea-title-' + idea.id">
+              <header class="card-head">
+                <h2 class="card-title" [id]="'idea-title-' + idea.id">{{ idea.title }}</h2>
+                <span class="chip chip-{{ idea.status }}" data-testid="idea-status-chip">{{ idea.status }}</span>
+              </header>
+              <p class="hook"><span class="label">Hook</span> “{{ idea.hook }}”</p>
+              <dl class="facts">
+                <div><dt>Angle</dt><dd>{{ idea.angle }}</dd></div>
+                <div><dt>Audience</dt><dd>{{ idea.audience }}</dd></div>
+                <div><dt>Value</dt><dd>{{ idea.valueProposition }}</dd></div>
+                <div><dt>Format</dt><dd>{{ formatLabel(idea.format) }}</dd></div>
+                <div><dt>Duration</dt><dd>{{ idea.targetDurationSec }} s</dd></div>
+                <div><dt>Topic</dt><dd>{{ idea.topicTitle }}</dd></div>
+              </dl>
+              @if (isSimilar(idea)) {
+                <p class="similar" data-testid="similarity-flag">
+                  <span class="chip chip-warning">Similar to an earlier idea</span>
+                  <span>Similarity {{ idea.similarityScore | number: '1.2-2' }}</span>
+                  @if (idea.duplicateOfId; as dup) {
+                    <a
+                      data-testid="similar-link"
+                      routerLink="/content/ideas"
+                      queryParamsHandling="preserve"
+                      [fragment]="'idea-' + dup"
+                    >
+                      View earlier idea
+                    </a>
+                  }
+                </p>
+              }
+              @if (idea.sourceRefs.length) {
+                <div class="sources">
+                  <span class="label">Sources</span>
+                  <ul data-testid="idea-sources">
+                    @for (s of idea.sourceRefs; track $index) {
+                      <li>
+                        @if (safeHref(s.url); as href) {
+                          <a [href]="href" target="_blank" rel="noopener noreferrer">
+                            {{ s.title || href }}<span class="visually-hidden"> (opens in a new tab)</span>
+                          </a>
+                        } @else {
+                          <span>{{ s.title || s.url }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+              <footer class="card-foot">
+                <app-llm-provenance [llm]="idea.llm" />
+                <span class="muted small">{{ idea.createdAt | date: 'medium' }}</span>
+                @if (isOwner() && idea.status === 'proposed') {
+                  <span class="card-actions">
+                    <button
+                      mat-flat-button
+                      type="button"
+                      data-testid="select-idea"
+                      [disabled]="busy().has(idea.id)"
+                      (click)="select(idea)"
+                    >
+                      Select
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      data-testid="discard-idea"
+                      [disabled]="busy().has(idea.id)"
+                      (click)="discard(idea)"
+                    >
+                      Discard
+                    </button>
+                  </span>
+                }
+              </footer>
+            </article>
+          </li>
+        }
+      </ul>
+      <div class="pager">
+        <span class="muted">{{ p.offset + 1 }}–{{ p.offset + p.items.length }} of {{ p.total }} ideas</span>
+        <button mat-stroked-button type="button" [disabled]="p.offset === 0" (click)="goTo(p.offset - pageSize)">
+          Previous
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="p.offset + p.items.length >= p.total"
+          (click)="goTo(p.offset + pageSize)"
+        >
+          Next
+        </button>
+      </div>
+    }
+  }
+</section>

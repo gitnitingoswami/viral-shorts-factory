@@ -28,6 +28,26 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong. 
   return fallback;
 }
 
+/**
+ * All messages from an `ApiError` (array messages stay separate, e.g. approval blockers).
+ * Falls back to {@link apiErrorMessage} when the body has no usable message.
+ */
+export function apiErrorMessages(err: unknown, fallback?: string): string[] {
+  if (err instanceof HttpErrorResponse && isApiError(err.error)) {
+    const { message } = err.error;
+    const list = (Array.isArray(message) ? message : [message]).map((m) => String(m).trim()).filter(Boolean);
+    if (list.length > 0) {
+      return list;
+    }
+  }
+  return [apiErrorMessage(err, fallback)];
+}
+
+/** HTTP status of an error, or null when it is not an HTTP error. */
+export function httpStatus(err: unknown): number | null {
+  return err instanceof HttpErrorResponse ? err.status : null;
+}
+
 /** True for same-origin API URLs (relative `/api` or `/api/...`). */
 export function isApiUrl(url: string): boolean {
   return url === API_BASE || url.startsWith(`${API_BASE}/`) || url.startsWith(`${API_BASE}?`);

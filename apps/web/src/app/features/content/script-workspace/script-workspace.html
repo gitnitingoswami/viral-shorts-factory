@@ -1,0 +1,167 @@
+<p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+<app-mock-banner />
+
+@if (generation(); as g) {
+  @if (generating()) {
+    <div class="state" role="status" data-testid="generation-status">
+      <mat-spinner diameter="20" aria-label="Drafting script" />
+      <span>Drafting script ({{ g.status }}, {{ g.progress }}%)…</span>
+    </div>
+  } @else if (g.status === 'failed' || g.status === 'cancelled') {
+    <p class="state state-error" role="alert" data-testid="generation-failed">
+      Script generation {{ g.status }}{{ g.error ? ': ' + g.error : '.' }}
+    </p>
+  }
+}
+
+@if (loading()) {
+  <div class="state" role="status">
+    <mat-spinner diameter="24" aria-label="Loading script" />
+    <span>Loading script…</span>
+  </div>
+} @else if (error(); as message) {
+  <div class="state state-error" role="alert">
+    <span>{{ message }}</span>
+    <button mat-stroked-button type="button" (click)="load()">Retry</button>
+  </div>
+} @else if (script(); as s) {
+  <div class="page-header">
+    <h1 class="page-title">{{ version()?.title || s.title || 'Untitled script' }}</h1>
+    <div class="actions">
+      <a mat-stroked-button routerLink="/content/scripts">All scripts</a>
+    </div>
+  </div>
+
+  <div class="meta">
+    <span class="chip chip-{{ s.status }}" data-testid="script-status">{{ statusLabels[s.status] }}</span>
+    @if (s.approvedVersion !== null) {
+      <span>Approved version: v{{ s.approvedVersion }}</span>
+    }
+    @if (versionsDesc().length) {
+      <label class="picker">
+        <span>Version</span>
+        <select data-testid="version-picker" [value]="selectedVersion() ?? ''" (change)="onVersionPick($event)">
+          @for (v of versionsDesc(); track v.version) {
+            <option [value]="v.version" [selected]="v.version === selectedVersion()">
+              v{{ v.version }} · {{ v.authorType === 'ai' ? 'AI' : 'Human' }}{{ v.version === s.currentVersion ? ' · current' : '' }}
+            </option>
+          }
+        </select>
+      </label>
+    }
+  </div>
+
+  @if (versionsDesc().length === 0) {
+    <p class="state" data-testid="no-versions">No version yet. The first draft appears here when generation finishes.</p>
+  } @else if (versionLoading() && !version()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading version" />
+      <span>Loading version…</span>
+    </div>
+  } @else if (versionError(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="loadVersion(selectedVersion() ?? s.currentVersion)">Retry</button>
+    </div>
+  } @else if (version(); as v) {
+    @if (!isCurrent()) {
+      <p class="notice" role="note" data-testid="old-version">
+        You are viewing v{{ v.version }}, an older version. Decisions and edits apply to the current version
+        (v{{ s.currentVersion }}).
+      </p>
+    }
+
+    @if (v.approvalBlockers.length) {
+      <section class="blockers" aria-labelledby="blockers-heading" data-testid="blockers">
+        <h2 id="blockers-heading" class="section-title">Approval blocked ({{ v.approvalBlockers.length }})</h2>
+        <ul id="approval-blockers">
+          @for (b of v.approvalBlockers; track $index) {
+            <li>{{ b }}</li>
+          }
+        </ul>
+      </section>
+    } @else {
+      <p class="ready" data-testid="no-blockers">All approval gates pass for v{{ v.version }}.</p>
+    }
+
+    <section class="summary" aria-label="Version summary">
+      <app-llm-provenance [llm]="v.llm" />
+      <span data-testid="word-count">{{ v.wordCount }} words</span>
+      <span data-testid="est-duration">≈ {{ v.estDurationSec }} s</span>
+      @if (durationWarning(); as w) {
+        <span class="chip chip-warning" data-testid="duration-warning">{{ w }}</span>
+      }
+      <span class="muted">Created {{ v.createdAt | date: 'medium' }} · hash {{ v.hash.slice(0, 12) }}</span>
+    </section>
+
+    <section class="checks" aria-labelledby="checks-heading">
+      <h2 id="checks-heading" class="section-title">Automated checks</h2>
+      <ul class="check-states" data-testid="check-states">
+        @for (c of checkEntries(); track c.key) {
+          <li>
+            {{ c.label }}: <span class="chip chip-{{ c.state }}" [attr.data-check-state]="c.key">{{ c.state }}</span>
+          </li>
+        }
+      </ul>
+      @if (pollingChecks) {
+        <span class="muted small" role="status">Checks in progress; refreshing automatically.</span>
+      }
+      @if (isOwner()) {
+        <button mat-stroked-button type="button" data-testid="rerun-checks" [disabled]="rerunning() || pollingChecks"
+          (click)="rerunChecks()">
+          Re-run checks
+        </button>
+      }
+    </section>
+
+    @if (canReview() && isCurrent()) {
+      <section class="decision" aria-labelledby="decision-heading">
+        <h2 id="decision-heading" class="section-title">Decision</h2>
+        <app-script-decision
+          [scriptId]="s.id"
+          [version]="v.version"
+          [blockers]="v.approvalBlockers"
+          blockersId="approval-blockers"
+          (decided)="onDecided($event)"
+        />
+      </section>
+    }
+
+    @if (editing()) {
+      <section class="panel">
+        <app-script-editor
+          [base]="v"
+          (saved)="onSaved($event)"
+          (cancelled)="editing.set(false)"
+          (reloadRequested)="onReloadRequested()"
+        />
+      </section>
+    } @else {
+      <section class="panel" aria-labelledby="storyboard-heading">
+        <div class="section-head">
+          <h2 id="storyboard-heading" class="section-title">Storyboard ({{ v.scenes.length }} scenes)</h2>
+          @if (canReview() && isCurrent()) {
+            <button mat-stroked-button type="button" data-testid="edit-script" (click)="editing.set(true)">Edit</button>
+          }
+        </div>
+        <app-storyboard [scenes]="v.scenes" />
+      </section>
+    }
+
+    <div class="columns">
+      <section class="panel" aria-labelledby="claims-heading">
+        <h2 id="claims-heading" class="section-title">Fact-check claims ({{ v.claims.length }})</h2>
+        <app-claims-panel [claims]="v.claims" (overridden)="onClaimOverridden($event)" />
+      </section>
+      <section class="panel" aria-labelledby="code-heading">
+        <h2 id="code-heading" class="section-title">Code verification ({{ v.codeChecks.length }})</h2>
+        <app-code-checks-panel [checks]="v.codeChecks" (overridden)="onCodeCheckOverridden($event)" />
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="reviews-heading">
+      <h2 id="reviews-heading" class="section-title">Reviews</h2>
+      <app-review-panel [reviews]="v.reviews" />
+    </section>
+  }
+}

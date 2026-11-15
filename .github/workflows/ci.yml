@@ -48,6 +48,8 @@ jobs:
           docker compose -f infra/docker/compose.yaml up -d storage
           for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8333/ && exit 0; sleep 2; done
           echo "storage did not start"; exit 1
+      - name: Pre-pull the code sandbox image (keeps the first sandbox run within test timeouts)
+        run: docker pull -q node:24.22.3-alpine
       - run: npm ci --no-audit --no-fund
       - run: npm run build:contracts
       - name: Migrations up/down/up + API e2e + worker

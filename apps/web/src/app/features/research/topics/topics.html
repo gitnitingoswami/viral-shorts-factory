@@ -131,6 +131,7 @@
                       [busy]="deciding().has(t.id)"
                       (decide)="decide(t, $event)"
                     />
+                    <app-generate-ideas [topic]="t" />
                   </td>
                 }
               </tr>

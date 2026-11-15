@@ -34,6 +34,7 @@ import {
 } from '../../../core/api/research-api.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { apiErrorMessage } from '../../../core/http/api-error';
+import { GenerateIdeas } from '../../content/generate-ideas';
 import { DecisionControls } from '../decision-controls';
 import { pct, sourceLabel, withDecision } from '../research-labels';
 
@@ -53,6 +54,7 @@ export const SEARCH_DEBOUNCE_MS = 300;
     MatProgressBarModule,
     MatProgressSpinnerModule,
     DecisionControls,
+    GenerateIdeas,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './topics.html',

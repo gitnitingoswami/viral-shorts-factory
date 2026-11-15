@@ -7,6 +7,10 @@ export const CORRELATION_HEADER = 'x-correlation-id';
 
 export const QUEUE_MAINTENANCE = 'maintenance';
 export const QUEUE_RESEARCH = 'research';
+export const QUEUE_CONTENT = 'content';
+export const JOB_TYPE_CONTENT_IDEAS = 'content.ideas';
+export const JOB_TYPE_CONTENT_SCRIPT = 'content.script';
+export const JOB_TYPE_CONTENT_CHECKS = 'content.checks';
 export const JOB_TYPE_RESEARCH_COLLECT = 'research.collect';
 export const JOB_NAME_RESEARCH_SCHEDULE = 'research.schedule';
 /** YouTube API Services policy: data about other channels must be refreshed or deleted within 30 days. */

@@ -128,14 +128,21 @@ a {
 
 .chip-ok,
 .chip-completed,
-.chip-approved {
+.chip-approved,
+.chip-supported,
+.chip-passed,
+.chip-done,
+.chip-selected {
   color: var(--app-status-ok);
   border-color: currentColor;
 }
 
 .chip-failed,
 .chip-rejected,
-.chip-exceeded {
+.chip-exceeded,
+.chip-contradicted,
+.chip-unsupported,
+.chip-unavailable {
   color: var(--mat-sys-error);
   border-color: currentColor;
 }
@@ -143,13 +150,20 @@ a {
 .chip-partial,
 .chip-warning,
 .chip-stale,
-.chip-skipped {
+.chip-skipped,
+.chip-mock,
+.chip-overridden,
+.chip-changes_requested,
+.chip-in_review {
   color: var(--app-status-warn);
   border-color: currentColor;
 }
 
 .chip-running,
-.chip-queued {
+.chip-queued,
+.chip-pending,
+.chip-drafting,
+.chip-proposed {
   color: var(--mat-sys-primary);
   border-color: currentColor;
 }
