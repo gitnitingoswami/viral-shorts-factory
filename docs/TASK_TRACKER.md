@@ -60,9 +60,12 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-02 | Separate non-owner DB role for the app (revoke UPDATE/DELETE/TRUNCATE on audit_event, no trigger disable) | Review #9 | 09 |
 | F-03 | Request hash in audit events (T18) | Review suggestion | 05 (publishing) |
 | F-04 | Test for wrong JWT issuer/audience | Review suggestion | **DONE in Phase 02** (issuer, audience, algorithm) |
-| F-05 | Web: navigate to login when a retried request still returns 401 after a successful refresh | Review suggestion | 02 |
+| F-05 | Web: navigate to login when a retried request still returns 401 after a successful refresh | Review suggestion | **DONE in Phase 02** |
 | F-06 | Re-evaluate EdDSA vs HS256 access tokens | SECURITY_DESIGN §4 | 09 |
 | F-07 | 3 moderate npm advisories (typeorm → minimatch), no high/critical | npm audit | Re-check each phase |
+| F-08 | Scoring fairness: topics outside the YouTube-checked top 15 lose the competition weight via confidence shrinkage; consider excluding it from confidence for unchecked topics | Phase 02 review suggestion | 06 (analytics calibration) |
+| F-10 | YouTube daily cap is read-then-record; several concurrent workers could slightly exceed it. Use an atomic reservation when workers scale out | Phase 02 review round 2 | 08 |
+| F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log
 - 2026-11-15 — Phase 02 implemented; live run against HN/SO/GitHub/RSS succeeded.

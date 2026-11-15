@@ -16,7 +16,7 @@ export const JOB_NAME_RESEARCH_PURGE = 'research.purge';
  * Worker for the `research` queue:
  * - `research.collect`: a DB-tracked job (lease-based claim) that runs one collection;
  * - `research.schedule`: cron tick that enqueues this week's run for every active niche (idempotent);
- * - `research.purge`: daily deletion of YouTube-derived data past its 30-day retention.
+ * - `research.purge`: hourly deletion/redaction of YouTube-derived data past its 30-day retention.
  */
 @Processor(QUEUE_RESEARCH, { concurrency: 1 })
 export class ResearchProcessor extends WorkerHost {
@@ -114,7 +114,8 @@ export class ResearchScheduler implements OnApplicationBootstrap, OnApplicationS
     }, this.intervalMs);
     this.timer.unref();
     await this.queue.upsertJobScheduler('research-weekly', { pattern: this.cron, tz: 'UTC' }, { name: JOB_NAME_RESEARCH_SCHEDULE, data: {} });
-    await this.queue.upsertJobScheduler('research-purge-daily', { pattern: '0 3 * * *', tz: 'UTC' }, { name: JOB_NAME_RESEARCH_PURGE, data: {} });
-    this.logger.log(`Research schedule registered: "${this.cron}" (UTC); purge daily 03:00 UTC`);
+    await this.queue.removeJobScheduler('research-purge-daily'); // replaced by the hourly schedule
+    await this.queue.upsertJobScheduler('research-purge-hourly', { pattern: '7 * * * *', tz: 'UTC' }, { name: JOB_NAME_RESEARCH_PURGE, data: {} });
+    this.logger.log(`Research schedule registered: "${this.cron}" (UTC); purge hourly`);
   }
 }
