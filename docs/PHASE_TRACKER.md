@@ -6,7 +6,7 @@ Status values: `NOT_STARTED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED`, `IN_REVIEW`, 
 |---|---|---|---|---|
 | 00 | Product discovery, PRD & architecture | ACCEPTED (user, 2026-11-14) | Lead Orchestrator | `tasks/reports/PHASE_00_COMPLETION_REPORT.md` |
 | 01 | Project foundation | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
-| 02 | Weekly trend research engine | IN_PROGRESS | Lead Orchestrator | — |
+| 02 | Weekly trend research engine | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_02_COMPLETION_REPORT.md` |
 | 03 | AI content strategy and scripts | NOT_STARTED | Lead Orchestrator | — |
 | 04 | AI video production | NOT_STARTED | Lead Orchestrator | — |
 | 05 | Social publishing engine | NOT_STARTED | Lead Orchestrator | — |
@@ -21,3 +21,4 @@ Only one phase may be `IN_PROGRESS` at a time. Phase 00 moves to `ACCEPTED` only
 ## Acceptance log
 - 2026-11-14 — Phase 00 accepted by the user. The user pre-approved acceptance of phases 01–09 when all acceptance criteria pass with evidence (public publishing, production deployment, new integrations/scope expansion, budget increases, and destructive actions still require explicit user approval).
 - 2026-11-15 — Phase 01 accepted: 8/8 criteria pass with evidence; independent review ACCEPT (round 2); GitHub CI green on 67ff191 (4/4 jobs).
+- 2026-11-15 — Phase 02 accepted: 9/9 criteria pass with evidence; independent review ACCEPT (round 2); GitHub CI green on 2b2e294 (4/4 jobs); live run 5/5 sources incl. YouTube.

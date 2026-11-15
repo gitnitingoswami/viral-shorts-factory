@@ -51,7 +51,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T02.5 | API: niches, runs, collections, topics, compare, decisions, report, budget | Lead Orchestrator | DONE | `research.controller.ts` |
 | T02.6 | Angular research UI + budget card | frontend-engineer (subagent) | DONE | `apps/web/src/app/features/research` |
 | T02.7 | Live smoke run against real public sources | Lead Orchestrator | DONE | 5/5 sources ok incl. YouTube; quality fixes (HN tags, GitHub clones/forks, sparse-score shrinkage) |
-| T02.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | IN_PROGRESS | |
+| T02.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review ACCEPT (round 2); CI 4/4 on 2b2e294 |
 
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
@@ -68,6 +68,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log
+- 2026-11-15 — Phase 02 ACCEPTED; PR #3 merged.
 - 2026-11-15 — Phase 02 implemented; live run against HN/SO/GitHub/RSS succeeded.
 - 2026-11-15 — YouTube Data API key configured by the user (`YOUTUBE_API_KEY` in local `.env`); verified with one search call; live run: 5/5 sources ok, 15 competition checks, 30-day expiry, quota recorded, key absent from logs.
 - 2026-11-15 — Phase 01 ACCEPTED (CI 4/4 green on 67ff191; review ACCEPT). PR #2 merged.

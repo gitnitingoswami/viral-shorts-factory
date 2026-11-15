@@ -53,6 +53,9 @@ are guarded, and the dashboard supports review, compare and approval.
 
 All three are fixed.
 
+## Git / CI
+PR #3: `b841ac0` feature · `d6e5f71` review fixes · `2b2e294` hourly purge + report. GitHub CI 4/4 green on `d6e5f71` and `2b2e294`.
+
 ## Tests
 API: 87 unit + 53 integration (all pass). Web: 92 (all pass). Lint, strict typecheck, builds clean. gitleaks: no leaks.
 
