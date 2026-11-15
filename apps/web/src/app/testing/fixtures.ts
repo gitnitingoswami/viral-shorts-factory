@@ -5,6 +5,12 @@ import type {
   ContentIdeaDto,
   JobDto,
   LlmStatusDto,
+  MediaAssetDto,
+  RenderCapabilityDto,
+  ScriptDto,
+  VideoProductionDetailDto,
+  VideoProductionDto,
+  VoiceProfileDto,
   ScriptDetailDto,
   ScriptVersionDto,
   NicheDto,
@@ -262,6 +268,158 @@ export function makeVersion(overrides: Partial<ScriptVersionDto> = {}): ScriptVe
     approvalBlockers: [],
     llm: null,
     createdAt: '2026-11-15T01:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeApprovedScript(overrides: Partial<ScriptDto> = {}): ScriptDto {
+  return {
+    id: 'sc1',
+    ideaId: 'i1',
+    title: 'Lock down fs access',
+    status: 'approved',
+    currentVersion: 2,
+    approvedVersion: 2,
+    createdAt: '2026-11-15T00:00:00.000Z',
+    updatedAt: '2026-11-15T01:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeVoice(overrides: Partial<VoiceProfileDto> = {}): VoiceProfileDto {
+  return {
+    id: 'vo1',
+    name: 'eSpeak English',
+    provider: 'espeak',
+    voiceId: 'en-us',
+    language: 'en',
+    rateWpm: 170,
+    quality: 'draft',
+    isDefault: true,
+    available: true,
+    ...overrides,
+  };
+}
+
+export function makeRenderCapability(overrides: Partial<RenderCapabilityDto> = {}): RenderCapabilityDto {
+  return {
+    ffmpeg: { available: true, version: '7.1' },
+    espeak: { available: true, version: '1.52' },
+    defaults: {
+      width: 1080,
+      height: 1920,
+      fps: 30,
+      codec: 'h264',
+      videoBitrateKbps: 8000,
+      audioBitrateKbps: 160,
+      minDurationSec: 20,
+      maxDurationSec: 60,
+      burnCaptions: true,
+    },
+    concurrency: 1,
+    ...overrides,
+  };
+}
+
+export function makeProduction(overrides: Partial<VideoProductionDto> = {}): VideoProductionDto {
+  return {
+    id: 'p1',
+    scriptId: 'sc1',
+    scriptTitle: 'Lock down fs access',
+    scriptVersion: 2,
+    scriptHash: 'abcdef0123456789',
+    voiceProfileId: 'vo1',
+    voiceName: 'eSpeak English',
+    settings: makeRenderCapability().defaults,
+    status: 'ready',
+    stage: 'done',
+    progress: 100,
+    error: null,
+    cancelRequested: false,
+    renderAttempt: 1,
+    jobId: 'j1',
+    latestVersion: 1,
+    createdAt: '2026-11-15T02:00:00.000Z',
+    updatedAt: '2026-11-15T02:05:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeAsset(overrides: Partial<MediaAssetDto> = {}): MediaAssetDto {
+  return {
+    id: 'a-img',
+    kind: 'image',
+    generated: true,
+    mime: 'image/png',
+    bytes: 20480,
+    sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    durationMs: null,
+    width: 1080,
+    height: 1920,
+    source: 'generated:frame-renderer@1',
+    creatorOrProvider: 'Viral Shorts Factory',
+    license: 'CC0-1.0',
+    licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/',
+    usageRights: 'Original work; unrestricted use',
+    generationParams: null,
+    provenance: null,
+    createdAt: '2026-11-15T02:01:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeProductionDetail(overrides: Partial<VideoProductionDetailDto> = {}): VideoProductionDetailDto {
+  return {
+    ...makeProduction(),
+    scenes: [
+      {
+        index: 0,
+        startMs: 0,
+        endMs: 8000,
+        narration: 'Your script can read your SSH keys.',
+        onScreenText: 'Danger!',
+        transition: 'cut',
+        audioAssetId: 'a-audio',
+        frameAssetIds: ['a-img'],
+        captions: [{ startMs: 0, endMs: 2500, text: 'Your script can read', lines: ['Your script can read'] }],
+      },
+    ],
+    versions: [
+      {
+        id: 'vv1',
+        version: 1,
+        videoAssetId: 'a-video',
+        captionsAssetId: 'a-vtt',
+        thumbnailAssetId: 'a-thumb',
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        durationMs: 32000,
+        codec: 'h264',
+        bitrateKbps: 8000,
+        sha256: 'feedface0123456789',
+        bytes: 5_000_000,
+        quality: {
+          id: 'q1',
+          passed: true,
+          checks: [
+            { id: 'duration', label: 'Duration', status: 'pass', detail: 'Within window', measured: '32.0 s', expected: '20–60 s' },
+            { id: 'voice', label: 'Voice quality', status: 'warn', detail: 'Draft voice', measured: 'draft', expected: 'production' },
+          ],
+          failures: [],
+          createdAt: '2026-11-15T02:05:00.000Z',
+        },
+        createdAt: '2026-11-15T02:05:00.000Z',
+      },
+    ],
+    assets: [
+      { ...makeAsset(), role: 'frame', sceneIndex: 0 },
+      {
+        ...makeAsset({ id: 'a-audio', kind: 'audio', mime: 'audio/wav', source: 'tts:espeak-ng', creatorOrProvider: 'eSpeak NG', license: 'GPL-3.0 output', licenseUrl: null, usageRights: 'Synthesized narration' }),
+        role: 'narration',
+        sceneIndex: 0,
+      },
+    ],
     ...overrides,
   };
 }

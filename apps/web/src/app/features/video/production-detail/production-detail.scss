@@ -1,0 +1,143 @@
+.status-panel,
+.section-head,
+.scene-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.section-head {
+  justify-content: space-between;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 200px;
+  flex: 1 1 200px;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.failure {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 2px solid var(--mat-sys-error);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+
+  .section-title {
+    color: var(--mat-sys-error);
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+}
+
+.player-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 16px;
+
+  @media (max-width: 800px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.frame {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 9 / 16;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  select {
+    font: var(--mat-sys-body-medium);
+    padding: 4px 6px;
+  }
+}
+
+.panel {
+  margin-top: 24px;
+}
+
+.ready {
+  color: var(--app-status-ok);
+}
+
+.failed-text {
+  color: var(--mat-sys-error);
+  font-weight: 600;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  .check {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .check-fail {
+    border-left: 4px solid var(--mat-sys-error);
+    padding-left: 8px;
+  }
+
+  .check-label {
+    font-weight: 600;
+  }
+
+  .check-detail {
+    flex-basis: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
+.timeline {
+  margin: 0;
+  padding-left: 20px;
+
+  li {
+    margin-bottom: 12px;
+  }
+
+  p {
+    margin: 4px 0;
+  }
+}
+
+.cues {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+  max-width: 260px;
+}

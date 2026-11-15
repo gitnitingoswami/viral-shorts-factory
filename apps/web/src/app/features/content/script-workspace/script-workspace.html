@@ -29,8 +29,18 @@
     <h1 class="page-title">{{ version()?.title || s.title || 'Untitled script' }}</h1>
     <div class="actions">
       <a mat-stroked-button routerLink="/content/scripts">All scripts</a>
+      @if (isOwner() && s.status === 'approved') {
+        <button mat-flat-button type="button" data-testid="render-video" [attr.aria-expanded]="renderOpen()"
+          (click)="renderOpen.set(!renderOpen())">
+          Render video
+        </button>
+      }
     </div>
   </div>
+
+  @if (renderOpen() && isOwner() && s.status === 'approved') {
+    <app-start-render-form [scriptId]="s.id" [scriptTitle]="s.title" (cancelled)="renderOpen.set(false)" />
+  }
 
   <div class="meta">
     <span class="chip chip-{{ s.status }}" data-testid="script-status">{{ statusLabels[s.status] }}</span>
@@ -107,10 +117,24 @@
         <span class="muted small" role="status">Checks in progress; refreshing automatically.</span>
       }
       @if (isOwner()) {
-        <button mat-stroked-button type="button" data-testid="rerun-checks" [disabled]="rerunning() || pollingChecks"
-          (click)="rerunChecks()">
+        <button #rerunBtn mat-stroked-button type="button" data-testid="rerun-checks" [disabled]="rerunning() || pollingChecks"
+          (click)="requestRerun()">
           Re-run checks
         </button>
+      }
+      @if (confirmRerun()) {
+        <div class="notice confirm-rerun" role="alertdialog" aria-labelledby="confirm-rerun-title"
+          aria-describedby="confirm-rerun-text" data-testid="confirm-rerun">
+          <strong id="confirm-rerun-title">Clear overrides and re-run checks?</strong>
+          <p id="confirm-rerun-text">
+            Re-running checks clears the {{ overrideCount() }} existing override(s) on v{{ v.version }}. They must be
+            re-entered after the checks finish.
+          </p>
+          <button mat-flat-button type="button" #confirmYes data-testid="confirm-rerun-yes" (click)="rerunChecks()">
+            Clear overrides and re-run
+          </button>
+          <button mat-button type="button" data-testid="confirm-rerun-no" (click)="cancelRerun()">Cancel</button>
+        </div>
       }
     </section>
 

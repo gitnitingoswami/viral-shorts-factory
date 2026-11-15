@@ -86,3 +86,16 @@
 .small {
   font: var(--mat-sys-body-small);
 }
+
+.confirm-rerun {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  p {
+    flex-basis: 100%;
+    margin: 0;
+  }
+}
