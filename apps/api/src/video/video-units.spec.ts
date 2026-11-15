@@ -3,7 +3,8 @@ import { buildCues, toSrt, toWebVtt, validateCues } from './captions';
 import type { ProbeResult } from './ffmpeg';
 import { parseRate } from './ffmpeg';
 import { buildFrameSvg, renderPng, tokenizeLine } from './frames';
-import { CAPTION, captionMaxChars, fitText, wrapWords } from './layout';
+import { CAPTION, captionMaxChars, captionRect, fitText, insideBox, SAFE_AREA, wrapWords } from './layout';
+import { redactMediaQuery } from '../common/logging';
 import { MediaSigner } from './media-signer';
 import { ProcessError, run } from './process';
 import { evaluateQuality, QualityInput, summarize } from './quality';
@@ -76,6 +77,18 @@ describe('layout and captions', () => {
     expect(msgs.some((m) => m.startsWith('warn:cue 2: on screen 300 ms'))).toBe(true);
   });
 
+  it('keeps every caption rectangle inside the Shorts safe area', () => {
+    const widest = ['x'.repeat(captionMaxChars()), 'y'.repeat(captionMaxChars())];
+    expect(insideBox(captionRect(widest), SAFE_AREA)).toBe(true);
+    expect(insideBox({ ...captionRect(['ok']), x: 10 }, SAFE_AREA)).toBe(false);
+  });
+
+  it('escapes caption text in WebVTT (code like Array<string> must not become markup)', () => {
+    const vtt = toWebVtt([{ startMs: 0, endMs: 1000, text: 'x', lines: ['Array<string> & a --> b'] }]);
+    expect(vtt).toContain('Array&lt;string&gt; &amp; a --&gt; b');
+    expect(vtt.split('-->').length).toBe(2); // only the timing separator
+  });
+
   it('serializes WebVTT and SRT timestamps', () => {
     const cues: CaptionCue[] = [{ startMs: 1500, endMs: 62_250, text: 'hi there', lines: ['hi', 'there'] }];
     expect(toWebVtt(cues)).toBe('WEBVTT\n\n1\n00:00:01.500 --> 00:01:02.250\nhi\nthere\n');
@@ -85,6 +98,12 @@ describe('layout and captions', () => {
 
 describe('frames', () => {
   const spec = { width: 1080, height: 1920, headline: 'Use <at> & "friends"', code: null, caption: ['a <b>'], progress: 0.5, sceneLabel: '1/3' };
+
+  it('drops characters XML cannot contain instead of failing the render', () => {
+    const { svg } = buildFrameSvg({ ...spec, headline: 'bad\u0000\u0007char\ud800s' });
+    expect(svg).toContain('badchars');
+    expect(() => renderPng(svg)).not.toThrow();
+  });
 
   it('escapes all text (no markup injection from script content)', () => {
     const { svg } = buildFrameSvg(spec);
@@ -139,13 +158,14 @@ describe('quality evaluation', () => {
     simplifiedTransitions: 0,
     truncatedCodeLines: 0,
     headlineOverflows: 0,
+    expectedDurationMs: 30_000,
     ...over,
   });
   const status = (checks: ReturnType<typeof evaluateQuality>, id: string) => checks.find((c) => c.id === id)?.status;
 
   it('passes a well-formed render', () => {
     const checks = evaluateQuality(base());
-    expect(summarize(checks)).toEqual({ passed: true, failures: [] });
+    expect(summarize(checks)).toEqual({ passed: true, publishable: true, failures: [] });
     expect(checks.every((c) => c.status === 'pass')).toBe(true);
   });
 
@@ -153,6 +173,8 @@ describe('quality evaluation', () => {
     expect(status(evaluateQuality(base({ probe: probe({ w: 720, h: 1280 }) })), 'video.dimensions')).toBe('fail');
     expect(status(evaluateQuality(base({ probe: probe({ vdur: '75.0', adur: '75.0' }) })), 'video.duration')).toBe('fail');
     expect(status(evaluateQuality(base({ probe: probe({ adur: '29.5' }) })), 'av.sync')).toBe('fail');
+    // Both streams equal to each other but off the planned timeline is still a sync failure.
+    expect(status(evaluateQuality(base({ expectedDurationMs: 32_000 })), 'av.sync')).toBe('fail');
     expect(status(evaluateQuality(base({ probe: probe({ codec: 'hevc' }) })), 'video.codec')).toBe('fail');
     expect(status(evaluateQuality(base({ probe: probe({ fps: '25/1' }) })), 'video.fps')).toBe('fail');
     expect(status(evaluateQuality(base({ probe: probe({ audio: false }) })), 'audio.present')).toBe('fail');
@@ -172,6 +194,9 @@ describe('quality evaluation', () => {
     const warned = evaluateQuality(base({ simplifiedTransitions: 2, truncatedCodeLines: 1, headlineOverflows: 1 }));
     expect(['visual.transitions', 'visual.code', 'visual.headline'].map((id) => status(warned, id))).toEqual(['warn', 'warn', 'warn']);
     expect(summarize(warned).passed).toBe(true);
+    // Draft voices pass the technical checks but are never publishable.
+    expect(summarize(evaluateQuality(base({ voiceQuality: 'draft' })))).toMatchObject({ passed: true, publishable: false });
+    expect(summarize(mock)).toMatchObject({ passed: false, publishable: false });
   });
 
   it('parses ffprobe frame rates', () => {
@@ -239,5 +264,13 @@ describe('process runner', () => {
     setTimeout(() => ac.abort(), 100);
     await expect(p).rejects.toMatchObject({ reason: 'aborted' });
     await expect(run('/nonexistent/binary-vsf', [], { timeoutMs: 1000 })).rejects.toBeInstanceOf(ProcessError);
+  });
+});
+
+describe('log redaction', () => {
+  it('removes signatures from signed media URLs only', () => {
+    expect(redactMediaQuery('/api/video/media/abc?exp=1&sig=secret')).toBe('/api/video/media/abc?[REDACTED]');
+    expect(redactMediaQuery('/api/video/productions?limit=5')).toBe('/api/video/productions?limit=5');
+    expect(redactMediaQuery(undefined)).toBeUndefined();
   });
 });

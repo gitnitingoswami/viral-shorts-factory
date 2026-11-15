@@ -67,7 +67,9 @@ export function run(bin: string, args: string[], opts: RunOptions): Promise<RunR
       if (opts.binaryStdout || !opts.onStdout) out.push(c);
     });
     child.stderr.on('data', (c: Buffer) => {
-      if (stderr.length < MAX_STDERR) stderr += c.toString('utf8');
+      // Keep the tail: FFmpeg prints summaries (loudnorm JSON, EBU R128) and the final error at the end.
+      stderr += c.toString('utf8');
+      if (stderr.length > MAX_STDERR) stderr = stderr.slice(-MAX_STDERR);
     });
     child.on('error', (e) => finish(new ProcessError(`${bin} could not start: ${e.message}`, null, stderr, 'spawn')));
     child.on('close', (code) => {

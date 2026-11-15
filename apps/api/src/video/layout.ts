@@ -19,7 +19,7 @@ export interface Box {
  * YouTube Shorts overlays the channel name, title and buttons on the bottom ~25% and the right edge, so captions
  * and key text stay inside this safe area (design units).
  */
-export const SAFE_AREA: Box = { x: 80, y: 120, width: 860, height: 1380 };
+export const SAFE_AREA: Box = { x: 60, y: 120, width: 900, height: 1380 };
 
 export const CAPTION = {
   /** Caption box (design units): inside the safe area, above the Shorts UI. */
@@ -32,6 +32,18 @@ export const CAPTION = {
   minCueMs: 700,
   maxCharsPerSec: 25,
 };
+
+/** Rendered caption rectangle (design units) for the given wrapped lines; the frame renderer draws exactly this. */
+export function captionRect(lines: string[]): Box {
+  const longest = Math.max(0, ...lines.map((l) => l.length));
+  const width = Math.min(CAPTION.box.width, longest * CAPTION.fontSize * MONO_ADVANCE + 2 * CAPTION.padding);
+  const height = lines.length * CAPTION.fontSize * CAPTION.lineHeight + 2 * CAPTION.padding;
+  return { x: CAPTION.box.x + (CAPTION.box.width - width) / 2, y: CAPTION.box.y + CAPTION.box.height - height, width, height };
+}
+
+export function insideBox(inner: Box, outer: Box): boolean {
+  return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+}
 
 /** Characters that fit on one caption line. */
 export function captionMaxChars(): number {

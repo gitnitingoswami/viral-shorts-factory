@@ -58,8 +58,9 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
-    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  /** Uploads a buffer, or a stream of known length (large media is streamed from disk, never buffered). */
+  async putObject(key: string, body: Buffer | Readable, contentType: string, contentLength?: number): Promise<void> {
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType, ContentLength: contentLength }));
   }
 
   /** Size of a stored object, or null when it does not exist. */

@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import type { CaptionCue, MediaKind, ProductionStatus, QualityCheckDto, RenderSettings, RenderStage, TtsProviderName } from '@vsf/contracts';
 
 const numeric = { to: (v: number) => v, from: (v: string | null) => (v === null ? null : Number(v)) };
@@ -82,9 +82,10 @@ export class VideoSceneEntity {
 
 @Entity('production_asset')
 export class ProductionAssetEntity {
-  @PrimaryColumn('uuid', { name: 'production_id' }) productionId: string;
-  @PrimaryColumn('uuid', { name: 'asset_id' }) assetId: string;
-  @PrimaryColumn('text') role: string;
+  @PrimaryGeneratedColumn('uuid') id: string;
+  @Column('uuid', { name: 'production_id' }) productionId: string;
+  @Column('uuid', { name: 'asset_id' }) assetId: string;
+  @Column('text') role: string;
   @Column('int', { name: 'scene_index', nullable: true }) sceneIndex: number | null;
 }
 
@@ -113,6 +114,7 @@ export class QualityReportEntity {
   @Column('uuid', { name: 'video_version_id' }) videoVersionId: string;
   @Column('jsonb') checks: QualityCheckDto[];
   @Column('boolean') passed: boolean;
+  @Column('boolean', { default: false }) publishable: boolean;
   @Column('text', { array: true, default: () => "'{}'" }) failures: string[];
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
 }

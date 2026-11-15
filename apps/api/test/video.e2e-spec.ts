@@ -202,6 +202,7 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     // Quality failures are visible: the mock tone is not publishable; everything else passes.
     const q = v.quality!;
     expect(q.passed).toBe(false);
+    expect(q.publishable).toBe(false);
     expect(q.failures).toEqual([expect.stringMatching(/^Voice: Mock tone/)]);
     const byId = Object.fromEntries(q.checks.map((c) => [c.id, c.status]));
     expect(byId).toMatchObject({
@@ -283,10 +284,36 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     await request(http).get(`${url.pathname}?exp=${Number(url.searchParams.get('exp')) + 1}&sig=${url.searchParams.get('sig')}`).expect(403);
     await request(http).get(`${url.pathname}?exp=1000&sig=${url.searchParams.get('sig')}`).expect(403);
     await request(http).get(`/api/video/assets/${v.videoAssetId}/url`).expect(401);
+
+    // Range edge cases: unsatisfiable → 416; malformed → ignored (full body).
+    const good = `${url.pathname}?exp=${url.searchParams.get('exp')}&sig=${url.searchParams.get('sig')}`;
+    await request(http).get(good).set('Range', `bytes=${v.bytes + 10}-`).expect(416);
+    await request(http).get(good).set('Range', 'bytes=abc').expect(200);
+  }, 120_000);
+
+  it('releases storage streams when players abort mid-download', async () => {
+    const v = mockProduction.versions[0];
+    const signed = await request(http).get(`/api/video/assets/${v.videoAssetId}/url`).set(auth(owner)).expect(200);
+    const server = app.getHttpServer() as import('node:http').Server;
+    if (!server.listening) await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const { port } = server.address() as import('node:net').AddressInfo;
+    // Abort far more downloads than the S3 client's socket pool (50) holds; leaked sockets would stall the next call.
+    for (let i = 0; i < 60; i++) {
+      const ac = new AbortController();
+      const res = await fetch(`http://127.0.0.1:${port}${signed.body.url}`, { signal: ac.signal });
+      const reader = res.body!.getReader();
+      await reader.read();
+      ac.abort();
+      await reader.cancel().catch(() => undefined);
+    }
+    const after = await download(v.videoAssetId);
+    expect(after.status).toBe(200);
+    expect((after.body as Buffer).length).toBe(v.bytes); // the server is closed by app.close() in afterAll
   }, 120_000);
 
   it('renders with the local eSpeak NG draft voice (ready, flagged as draft)', async () => {
     if (!espeakAvailable) {
+      if (process.env.CI) throw new Error('eSpeak NG must be installed in CI');
       console.warn('eSpeak NG not installed: skipping the draft-voice render');
       return;
     }
@@ -295,6 +322,7 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     expect(done.status).toBe('ready');
     const q = done.versions[0].quality!;
     expect(q.passed).toBe(true);
+    expect(q.publishable).toBe(false); // draft voice: technically sound, never publishable
     expect(q.checks.find((c) => c.id === 'voice.publishable')).toMatchObject({ status: 'warn', detail: expect.stringMatching(/Draft voice/) });
     expect(done.versions[0]).toMatchObject({ width: 720, height: 1280 });
     const [exp] = await ds.query<Array<{ count: string }>>(`SELECT count(*) FROM expense_record WHERE category = 'tts' AND provider = 'espeak' AND related_id = $1`, [production.id]);
@@ -307,6 +335,7 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
       [WS],
     );
     mockTts().failNext = 1;
+    const callsBefore = mockTts().calls;
     const { production, job } = await createProduction({ scriptId, voiceProfileId: voice.id, settings: FAST });
     const done = await waitProduction(production.id, ['ready', 'quality_failed', 'failed']);
     expect(done.status).toBe('quality_failed'); // mock voice
@@ -316,6 +345,15 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     expect(Number(dup)).toBe(0);
     const narration = done.assets.filter((a) => a.role === 'narration');
     expect(narration).toHaveLength(4);
+    // 1 failed call + 4 scenes; the retry did not re-synthesize anything already stored.
+    expect(mockTts().calls - callsBefore).toBe(5);
+    const [{ count: audioBefore }] = await ds.query<Array<{ count: string }>>(`SELECT count(*) FROM media_asset WHERE kind = 'audio'`);
+    // Same voice + text in another production: narration comes from the cache (no provider calls, no new rows).
+    const other = await createProduction({ scriptId, voiceProfileId: voice.id, settings: { ...FAST, fps: 24 } });
+    await waitProduction(other.production.id, ['ready', 'quality_failed', 'failed']);
+    expect(mockTts().calls - callsBefore).toBe(5);
+    const [{ count: audioAfter }] = await ds.query<Array<{ count: string }>>(`SELECT count(*) FROM media_asset WHERE kind = 'audio'`);
+    expect(audioAfter).toBe(audioBefore);
   }, 120_000);
 
   it('recovers a render whose worker died mid-job (lease takeover) and produces exactly one version', async () => {
@@ -358,10 +396,48 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     expect(done.status).toBe('quality_failed');
     expect(done.versions).toHaveLength(1);
     expect(done.versions[0].quality?.checks.find((c) => c.id === 'captions.bounds')?.status).toBe('warn'); // not burned in
-    // A finished production cannot be retried while ready/rendering, only after failure/cancel/quality failure.
+    // A quality-failed production may be re-rendered (ready/rendering ones may not: see the cancel test's 409s).
     await request(http).post(`/api/video/productions/${production.id}/retry`).set(auth(owner)).expect(202);
     await waitProduction(production.id, ['ready', 'quality_failed', 'failed']);
   }, 180_000);
+
+  it('renders when the worker picks the job up before the API linked it, and re-enqueues productions left unlinked', async () => {
+    await worker.close();
+    // Dispatch happened, but the link write had not (or never) landed.
+    const a = await createProduction({ scriptId, voiceProfileId: mockVoiceId, settings: { ...FAST, videoBitrateKbps: 4000 } });
+    await ds.query(`UPDATE video_production SET job_id = NULL WHERE id = $1`, [a.production.id]);
+    // The API crashed before creating the job at all.
+    const [orphan] = await ds.query<Array<{ id: string }>>(
+      `INSERT INTO video_production (workspace_id, script_id, script_version_id, script_hash, voice_profile_id, settings, settings_hash, updated_at)
+       SELECT workspace_id, script_id, script_version_id, script_hash, voice_profile_id, jsonb_set(settings, '{videoBitrateKbps}', '3500'), repeat('e', 64), now() - interval '1 hour'
+         FROM video_production WHERE id = $1 RETURNING id`,
+      [a.production.id],
+    );
+    worker = await createWorker();
+    const linked = await waitProduction(a.production.id, ['ready', 'quality_failed', 'failed']);
+    expect(linked.status).toBe('quality_failed'); // mock voice; not "Superseded"
+    expect(linked.jobId).toBe(a.job!.id);
+
+    // The worker's periodic reconciler (500 ms in tests) re-enqueues and links the orphan.
+    const recovered = await waitProduction(orphan.id, ['ready', 'quality_failed', 'failed']);
+    expect(recovered.status).toBe('quality_failed');
+    expect(recovered.jobId).not.toBeNull();
+  }, 120_000);
+
+  it('does not re-render (or downgrade) a production whose job was re-claimed after its result was committed', async () => {
+    const { production, job } = await createProduction({ scriptId, voiceProfileId: mockVoiceId, settings: { ...FAST, videoBitrateKbps: 4500 } });
+    const done = await waitProduction(production.id, ['ready', 'quality_failed', 'failed']);
+    await waitFor(async () => ((await jobRow(job!.id)).status === 'completed' ? true : undefined));
+    const expenses = async () => Number((await ds.query<Array<{ c: string }>>(`SELECT count(*) AS c FROM expense_record WHERE related_id = $1`, [production.id]))[0].c);
+    const before = await expenses();
+    // The worker committed the version and then died before marking the job completed.
+    await ds.query(`UPDATE job SET status = 'running', attempt = 1, lease_owner = 'dead-worker', lease_until = now() - interval '1 second', finished_at = NULL WHERE id = $1`, [job!.id]);
+    await waitFor(async () => ((await jobRow(job!.id)).status === 'completed' ? true : undefined), 30_000);
+    const after = await waitProduction(production.id, [done.status]);
+    expect(after.versions).toHaveLength(1);
+    expect(after.status).toBe(done.status);
+    expect(await expenses()).toBe(before);
+  }, 120_000);
 
   it('fails fast without retries when FFmpeg is missing (non-retryable)', async () => {
     const pipeline = worker.get<VideoPipeline, { bins: { ffmpeg: string } }>(VideoPipeline);
@@ -382,6 +458,7 @@ describe('Video production (e2e: real FFmpeg, mock + eSpeak TTS, S3 storage)', (
     try {
       const { production, job } = await createProduction({ scriptId, voiceProfileId: mockVoiceId, settings: { ...FAST, videoBitrateKbps: 2500 } });
       await waitProduction(production.id, ['rendering'], 30_000);
+      await request(http).post(`/api/video/productions/${production.id}/cancel`).set(auth(reviewer)).expect(403);
       const c = await request(http).post(`/api/video/productions/${production.id}/cancel`).set(auth(owner)).expect(200);
       expect((c.body as VideoProductionDto).cancelRequested).toBe(true);
       const done = await waitProduction(production.id, ['cancelled', 'ready', 'quality_failed', 'failed'], 30_000);

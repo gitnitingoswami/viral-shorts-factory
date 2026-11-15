@@ -22,6 +22,7 @@ import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsUUID, Max, Min, ValidateNested } from 'class-validator';
 import { S3ServiceException } from '@aws-sdk/client-s3';
 import type { Response } from 'express';
+import { pipeline } from 'node:stream/promises';
 import type {
   CreateProductionRequest,
   CreateProductionResponse,
@@ -44,7 +45,7 @@ class SettingsBody implements Partial<RenderSettings> {
   @IsOptional() @IsInt() height?: number;
   @IsOptional() @IsIn(ALLOWED_FPS) fps?: RenderSettings['fps'];
   @IsOptional() @IsIn(['h264']) codec?: 'h264';
-  @IsOptional() @IsInt() @Min(500) @Max(50_000) videoBitrateKbps?: number;
+  @IsOptional() @IsInt() @Min(500) @Max(20_000) videoBitrateKbps?: number;
   @IsOptional() @IsInt() @Min(64) @Max(320) audioBitrateKbps?: number;
   @IsOptional() @IsInt() @Min(1) @Max(179) minDurationSec?: number;
   @IsOptional() @IsInt() @Min(2) @Max(180) maxDurationSec?: number;
@@ -166,7 +167,8 @@ export class VideoController {
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.setHeader('Content-Disposition', 'inline');
     if (media.partial && media.contentRange) res.setHeader('Content-Range', media.contentRange);
-    media.body.on('error', () => res.destroy());
-    media.body.pipe(res);
+    // pipeline() destroys the storage stream when the client aborts (seeking players abort often), so S3 sockets
+    // are released instead of leaking from the shared pool.
+    await pipeline(media.body, res).catch(() => media.body.destroy());
   }
 }

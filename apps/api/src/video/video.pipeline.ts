@@ -54,6 +54,8 @@ export interface RenderContext {
   workerId: string;
   workspaceId: string;
   signal: AbortSignal;
+  /** Render attempt the job was created for (job input); used to take ownership of an unlinked production. */
+  renderAttempt: number;
   /** Extends the job lease and records progress; false = lease lost. */
   heartbeat: (progress: number) => Promise<boolean>;
 }
@@ -64,6 +66,8 @@ export interface RenderOutput {
   version?: number;
   videoAssetId?: string;
   durationMs?: number;
+  /** Passed every check and uses a production voice: the gate for publishing (Phase 05+). */
+  publishable?: boolean;
   failures?: string[];
 }
 
@@ -109,8 +113,17 @@ export class VideoPipeline {
     const m = this.dataSource.manager;
     const prod = await m.findOneBy(VideoProductionEntity, { id: productionId, workspaceId: ctx.workspaceId });
     if (!prod) throw new RenderNonRetryableError('Production not found');
+    // Already finished by this job (e.g. the worker died after committing the result but before completing the
+    // job, and the job was re-claimed): return the recorded outcome instead of rendering again.
+    const finished = await this.finishedResult(prod.id, ctx.jobId);
+    if (finished) return finished;
+    // Ownership by render attempt: the job created for the current attempt owns the production even if the API
+    // has not linked it yet (enqueue dispatches before the link is written).
+    await this.dataSource.query(`UPDATE video_production SET job_id = $2 WHERE id = $1 AND render_attempt = $3 AND job_id IS NULL`, [prod.id, ctx.jobId, ctx.renderAttempt]);
+    const [{ job_id: ownerJob }] = await this.dataSource.query<Array<{ job_id: string | null }>>(`SELECT job_id FROM video_production WHERE id = $1`, [prod.id]);
+    if (ownerJob !== ctx.jobId) throw new RenderNonRetryableError('Superseded by a newer render job');
     if (prod.status === 'cancelled' || prod.cancelRequested) return this.markCancelled(prod.id, ctx);
-    if (prod.jobId !== ctx.jobId) throw new RenderNonRetryableError('Superseded by a newer render job');
+    if (!['queued', 'rendering'].includes(prod.status)) throw new RenderNonRetryableError(`Production is ${prod.status}; start a new render attempt instead`);
 
     const scenes = await this.loadApprovedScenes(prod);
     const voice = await m.findOneByOrFail(VoiceProfileEntity, { id: prod.voiceProfileId });
@@ -121,7 +134,7 @@ export class VideoPipeline {
     if (!ffmpegVersion) throw new RenderNonRetryableError('FFmpeg is not installed on this worker');
 
     await this.dataSource.query(
-      `UPDATE video_production SET status = 'rendering', stage = 'narration', progress = 2, error = NULL, updated_at = now() WHERE id = $1 AND job_id = $2 AND status <> 'cancelled'`,
+      `UPDATE video_production SET status = 'rendering', stage = 'narration', progress = 2, error = NULL, updated_at = now() WHERE id = $1 AND job_id = $2 AND status IN ('queued', 'rendering')`,
       [prod.id, ctx.jobId],
     );
     const workDir = await mkdtemp(join(tmpdir(), 'vsf-render-'));
@@ -228,13 +241,12 @@ export class VideoPipeline {
       });
       await this.assets.link(prod.id, vtt.id, 'captions', null);
 
-      const mp4 = await readFile(out);
       const p = await probe(this.bins, out, this.step(ctx));
       const video = await this.assets.store({
         workspaceId: prod.workspaceId,
         kind: 'video',
         generated: true,
-        body: mp4,
+        body: { path: out },
         mime: 'video/mp4',
         ext: 'mp4',
         durationMs: durationMs(p),
@@ -271,6 +283,7 @@ export class VideoPipeline {
         simplifiedTransitions: scenes.filter((sc) => sc.transition !== 'cut').length,
         truncatedCodeLines: notes.truncatedCodeLines,
         headlineOverflows: notes.headlineOverflows,
+        expectedDurationMs: totalMs,
       });
       const summary = summarize(checks);
 
@@ -297,10 +310,21 @@ export class VideoPipeline {
     }
   }
 
+  private async finishedResult(productionId: string, jobId: string): Promise<RenderOutput | null> {
+    const [row] = await this.dataSource.query<Array<{ version: number; video_asset_id: string; duration_ms: number; passed: boolean | null; publishable: boolean | null; failures: string[] | null }>>(
+      `SELECT v.version, v.video_asset_id, v.duration_ms, q.passed, q.publishable, q.failures
+         FROM video_version v LEFT JOIN quality_report q ON q.video_version_id = v.id
+        WHERE v.production_id = $1 AND v.render_key = $2`,
+      [productionId, jobId],
+    );
+    if (!row) return null;
+    return { productionId, status: row.passed ? 'ready' : 'quality_failed', version: row.version, videoAssetId: row.video_asset_id, durationMs: row.duration_ms, publishable: row.publishable === true, failures: row.failures ?? [] };
+  }
+
   /** Cancellation outcome: production cancelled; no version is created. */
   async markCancelled(productionId: string, ctx: Pick<RenderContext, 'jobId'>): Promise<RenderOutput> {
     await this.dataSource.query(
-      `UPDATE video_production SET status = 'cancelled', error = 'Cancelled by user', updated_at = now() WHERE id = $1 AND (job_id = $2 OR job_id IS NULL) AND status IN ('queued', 'rendering', 'cancelled')`,
+      `UPDATE video_production SET status = 'cancelled', error = 'Cancelled by user', updated_at = now() WHERE id = $1 AND job_id = $2 AND status IN ('queued', 'rendering', 'cancelled')`,
       [productionId, ctx.jobId],
     );
     return { productionId, status: 'cancelled' };
@@ -461,7 +485,7 @@ export class VideoPipeline {
   private async finalize(
     prod: VideoProductionEntity,
     ctx: RenderContext,
-    r: { video: MediaAssetEntity; vtt: MediaAssetEntity; thumb: MediaAssetEntity; probe: Awaited<ReturnType<typeof probe>>; checks: ReturnType<typeof evaluateQuality>; summary: { passed: boolean; failures: string[] } },
+    r: { video: MediaAssetEntity; vtt: MediaAssetEntity; thumb: MediaAssetEntity; probe: Awaited<ReturnType<typeof probe>>; checks: ReturnType<typeof evaluateQuality>; summary: { passed: boolean; publishable: boolean; failures: string[] } },
   ): Promise<RenderOutput> {
     const v = r.probe.streams.find((x) => x.codec_type === 'video');
     const out = await this.dataSource.transaction(async (tx): Promise<RenderOutput> => {
@@ -470,6 +494,13 @@ export class VideoPipeline {
       if (!job) throw new RenderLeaseLostError();
       const [p] = await tx.query<Array<{ cancel_requested: boolean; job_id: string | null }>>(`SELECT cancel_requested, job_id FROM video_production WHERE id = $1 FOR UPDATE`, [prod.id]);
       if (p.job_id !== ctx.jobId) throw new RenderNonRetryableError('Superseded by a newer render job');
+      // The approval may have been revoked while rendering: never record a version for an unapproved script.
+      const [approved] = await tx.query<unknown[]>(
+        `SELECT 1 FROM script_version v JOIN video_script s ON s.id = v.script_id
+          WHERE v.id = $1 AND s.status = 'approved' AND s.approved_version = v.version AND v.content_hash = $2 FOR SHARE OF s`,
+        [prod.scriptVersionId, prod.scriptHash],
+      );
+      if (!approved) throw new RenderNonRetryableError('The script approval was revoked during rendering; approve it again and retry');
       if (p.cancel_requested) {
         await tx.query(`UPDATE video_production SET status = 'cancelled', error = 'Cancelled by user', updated_at = now() WHERE id = $1`, [prod.id]);
         return { productionId: prod.id, status: 'cancelled' };
@@ -497,16 +528,17 @@ export class VideoPipeline {
       );
       const [ver] = await tx.query<Array<{ id: string; version: number }>>(`SELECT id, version FROM video_version WHERE production_id = $1 AND render_key = $2`, [prod.id, ctx.jobId]);
       await tx.query(
-        `INSERT INTO quality_report (video_version_id, checks, passed, failures) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (video_version_id) DO UPDATE SET checks = EXCLUDED.checks, passed = EXCLUDED.passed, failures = EXCLUDED.failures, created_at = now()`,
-        [ver.id, JSON.stringify(r.checks), r.summary.passed, r.summary.failures],
+        `INSERT INTO quality_report (video_version_id, checks, passed, publishable, failures) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (video_version_id) DO UPDATE SET checks = EXCLUDED.checks, passed = EXCLUDED.passed, publishable = EXCLUDED.publishable,
+           failures = EXCLUDED.failures, created_at = now()`,
+        [ver.id, JSON.stringify(r.checks), r.summary.passed, r.summary.publishable, r.summary.failures],
       );
       const status = r.summary.passed ? 'ready' : 'quality_failed';
       await tx.query(
         `UPDATE video_production SET status = $2, stage = 'done', progress = 100, error = $3, updated_at = now() WHERE id = $1`,
         [prod.id, status, r.summary.passed ? null : `Quality checks failed: ${r.summary.failures.length}`],
       );
-      return { productionId: prod.id, status, version: ver.version, videoAssetId: r.video.id, durationMs: r.video.durationMs ?? 0, failures: r.summary.failures };
+      return { productionId: prod.id, status, version: ver.version, videoAssetId: r.video.id, durationMs: r.video.durationMs ?? 0, publishable: r.summary.publishable, failures: r.summary.failures };
     });
     await this.audit.record({
       actorType: 'worker',
@@ -542,8 +574,11 @@ export class VideoPipeline {
 /** The processor aborts with reason 'lease' when the job lease is lost, otherwise it is a user cancellation. */
 export const ABORT_LEASE = 'lease';
 export const ABORT_CANCEL = 'cancel';
+export const ABORT_DEADLINE = 'deadline';
 function abortError(signal: AbortSignal): Error {
-  return signal.reason === ABORT_LEASE ? new RenderLeaseLostError() : new RenderCancelledError();
+  if (signal.reason === ABORT_LEASE) return new RenderLeaseLostError();
+  if (signal.reason === ABORT_DEADLINE) return new Error('Render exceeded its overall deadline'); // retryable
+  return new RenderCancelledError();
 }
 
 const ORIGINAL_RIGHTS = (source: string) => ({

@@ -88,6 +88,8 @@ describe('ProductionDetail', () => {
     expect(report.querySelector('[data-quality-check="voice"] [data-testid="check-status"]')?.textContent).toContain('Warning');
     expect(report.textContent).toContain('Measured: 32.0 s · Expected: 20–60 s');
     expect(q('[data-testid="quality-failures"]')).toBeNull();
+    // Technically sound but draft voice: the publish gate is shown.
+    expect(q('[data-testid="publish-gate"]')?.textContent).toContain('Not publishable yet');
   });
 
   it('makes quality failures prominent and offers retry to owners', () => {
@@ -103,6 +105,7 @@ describe('ProductionDetail', () => {
             quality: {
               ...v.quality!,
               passed: false,
+              publishable: false,
               checks: [...v.quality!.checks, { id: 'loudness', label: 'Loudness', status: 'fail', detail: 'Too quiet', measured: '-30 LUFS', expected: '-16 ± 2 LUFS' }],
               failures: ['Loudness -30 LUFS is outside -16 ± 2 LUFS'],
             },

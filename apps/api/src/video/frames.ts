@@ -2,7 +2,7 @@ import { Resvg } from '@resvg/resvg-js';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { SceneCode } from '@vsf/contracts';
-import { CAPTION, CODE, DESIGN_HEIGHT, DESIGN_WIDTH, fitText, HEADLINE, MONO_ADVANCE, TITLE_CARD } from './layout';
+import { CAPTION, captionRect, CODE, DESIGN_HEIGHT, DESIGN_WIDTH, fitText, HEADLINE, MONO_ADVANCE, TITLE_CARD } from './layout';
 
 /** Version of the frame design; part of every frame's cache key and provenance. */
 export const FRAME_RENDERER_REF = 'frame-renderer@1';
@@ -55,7 +55,10 @@ export interface FrameLayoutNotes {
   codeFontSize: number | null;
 }
 
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+/** XML-escapes text and drops characters XML cannot contain (control chars, lone surrogates). */
+// eslint-disable-next-line no-control-regex
+const INVALID_XML = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+const esc = (s: string): string => s.replace(INVALID_XML, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 /** Non-breaking spaces keep indentation and runs of spaces (SVG collapses normal whitespace). */
 const keepSpaces = (s: string): string => s.replace(/ /g, ' ');
 
@@ -176,11 +179,7 @@ export function buildFrameSvg(spec: FrameSpec): { svg: string; notes: FrameLayou
 
   if (spec.caption && spec.caption.length) {
     const fs = CAPTION.fontSize;
-    const h = spec.caption.length * fs * CAPTION.lineHeight + 2 * CAPTION.padding;
-    const longest = Math.max(...spec.caption.map((l) => l.length));
-    const w = Math.min(CAPTION.box.width, longest * fs * MONO_ADVANCE + 2 * CAPTION.padding);
-    const x = CAPTION.box.x + (CAPTION.box.width - w) / 2;
-    const y = CAPTION.box.y + CAPTION.box.height - h;
+    const { x, y, width: w, height: h } = captionRect(spec.caption);
     parts.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="18" fill="${COLORS.captionBg}" fill-opacity="0.78"/>`);
     parts.push(textBlock(spec.caption, CAPTION.box.x + CAPTION.box.width / 2, y + CAPTION.padding - fs * 0.2, fs, CAPTION.lineHeight, 'bold', '#ffffff', 'middle'));
   }

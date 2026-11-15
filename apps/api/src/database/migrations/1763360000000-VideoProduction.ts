@@ -80,6 +80,8 @@ export class VideoProduction1763360000000 implements MigrationInterface {
         CONSTRAINT uq_video_production_identity UNIQUE (script_version_id, settings_hash, voice_profile_id)
       )`);
     await q.query(`CREATE INDEX ix_video_production_ws_created ON video_production (workspace_id, created_at DESC)`);
+    await q.query(`CREATE INDEX ix_video_production_job ON video_production (job_id)`);
+    await q.query(`CREATE INDEX ix_video_production_pending ON video_production (updated_at) WHERE status IN ('queued', 'rendering')`);
 
     await q.query(`
       CREATE TABLE video_scene (
@@ -100,12 +102,14 @@ export class VideoProduction1763360000000 implements MigrationInterface {
 
     await q.query(`
       CREATE TABLE production_asset (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         production_id uuid NOT NULL REFERENCES video_production(id) ON DELETE CASCADE,
         asset_id uuid NOT NULL REFERENCES media_asset(id),
         role text NOT NULL,
-        scene_index int,
-        PRIMARY KEY (production_id, asset_id, role)
+        scene_index int
       )`);
+    // The same asset can serve several scenes (e.g. identical narration served from the cache).
+    await q.query(`CREATE UNIQUE INDEX uq_production_asset ON production_asset (production_id, asset_id, role, COALESCE(scene_index, -1))`);
 
     await q.query(`
       CREATE TABLE video_version (
@@ -134,6 +138,7 @@ export class VideoProduction1763360000000 implements MigrationInterface {
         video_version_id uuid NOT NULL UNIQUE REFERENCES video_version(id) ON DELETE CASCADE,
         checks jsonb NOT NULL,
         passed boolean NOT NULL,
+        publishable boolean NOT NULL DEFAULT false,
         failures text[] NOT NULL DEFAULT '{}',
         created_at timestamptz NOT NULL DEFAULT now()
       )`);

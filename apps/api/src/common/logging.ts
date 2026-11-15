@@ -15,6 +15,11 @@ export function correlationId(req: IncomingMessage, res: ServerResponse): string
   return id;
 }
 
+/** Strips the query (exp/sig) from signed media URLs before logging. */
+export function redactMediaQuery(url: string | undefined): string | undefined {
+  return url?.startsWith('/api/video/media/') ? url.replace(/\?.*$/, '?[REDACTED]') : url;
+}
+
 /** pino-pretty is a devDependency; production images don't include it. */
 function isInstalled(pkg: string): boolean {
   try {
@@ -35,6 +40,10 @@ export const AppLoggerModule = LoggerModule.forRootAsync({
         level: config.get('LOG_LEVEL', { infer: true }),
         genReqId: correlationId,
         customProps: () => ({ service: 'vsf-api' }),
+        // Signed media URLs carry a capability in the query string: never log it.
+        serializers: {
+          req: (req: { url?: string } & Record<string, unknown>) => ({ ...req, url: redactMediaQuery(req.url) }),
+        },
         redact: {
           paths: [
             'req.headers.authorization',

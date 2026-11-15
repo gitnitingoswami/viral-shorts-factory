@@ -147,6 +147,12 @@
             <span aria-hidden="true">{{ q.passed ? '✓ ' : '✕ ' }}</span>
             {{ q.passed ? 'All required checks passed.' : 'Failed: ' + q.failures.length + ' blocking issue(s).' }}
           </p>
+          @if (q.passed && !q.publishable) {
+            <p class="failed-text" data-testid="publish-gate">
+              <span aria-hidden="true">⚠ </span>Not publishable yet: narrated with a draft or test voice. Re-render with a production voice before
+              publishing.
+            </p>
+          }
           <ul class="checks">
             @for (c of q.checks; track c.id) {
               <li [attr.data-quality-check]="c.id" [class]="'check check-' + c.status">

@@ -107,7 +107,11 @@ export class VideoService {
     this.env = config;
     this.signer = new MediaSigner(config.get('JWT_ACCESS_SECRET', { infer: true }));
     this.urlTtl = config.get('MEDIA_URL_TTL_SECONDS', { infer: true });
+    // Fail fast at boot on invalid RENDER_* defaults (otherwise every create would return 400).
+    resolveSettings(this.defaults(), undefined);
   }
+
+  private capabilityCache: { at: number; value: Promise<RenderCapabilityDto> } | null = null;
 
   private defaults() {
     return defaultSettings({
@@ -119,7 +123,13 @@ export class VideoService {
   }
 
   /** Capabilities of this host (API and worker share one image in deployment). */
-  async capability(): Promise<RenderCapabilityDto> {
+  capability(): Promise<RenderCapabilityDto> {
+    // Probing spawns processes: cache for a minute.
+    if (!this.capabilityCache || Date.now() - this.capabilityCache.at > 60_000) this.capabilityCache = { at: Date.now(), value: this.probeCapability() };
+    return this.capabilityCache.value;
+  }
+
+  private async probeCapability(): Promise<RenderCapabilityDto> {
     const [ffmpeg, espeak] = await Promise.all([probeVersion(this.env.get('FFMPEG_PATH', { infer: true }), '-version'), probeVersion(this.env.get('ESPEAK_PATH', { infer: true }), '--version')]);
     return {
       ffmpeg: { available: Boolean(ffmpeg), version: ffmpeg },
@@ -201,19 +211,8 @@ export class VideoService {
     return { production: await this.get(actor.workspaceId, prod.id), job, created };
   }
 
-  private async enqueue(prod: Pick<VideoProductionEntity, 'id' | 'renderAttempt' | 'workspaceId'>, actor: Actor) {
-    const { job } = await this.jobs.enqueue({
-      type: JOB_TYPE_VIDEO_RENDER,
-      queue: QUEUE_RENDER,
-      idempotencyKey: `video.render:${prod.id}:${prod.renderAttempt}`,
-      input: { productionId: prod.id },
-      maxAttempts: 3,
-      createdBy: actor.userId,
-      correlationId: actor.correlationId,
-      workspaceId: prod.workspaceId,
-    });
-    await this.dataSource.query(`UPDATE video_production SET job_id = $2, updated_at = now() WHERE id = $1 AND job_id IS DISTINCT FROM $2`, [prod.id, job.id]);
-    return job;
+  private enqueue(prod: Pick<VideoProductionEntity, 'id' | 'renderAttempt' | 'workspaceId'>, actor: Actor) {
+    return enqueueRender(this.jobs, this.dataSource, prod, actor.userId, actor.correlationId);
   }
 
   async list(workspaceId: string, q: { status?: string; limit: number; offset: number }): Promise<Page<VideoProductionDto>> {
@@ -293,8 +292,9 @@ export class VideoService {
     if (!prod) throw new NotFoundException('Production not found');
     if (prod.status !== 'queued' && prod.status !== 'rendering') throw new ConflictException(`A ${prod.status} production cannot be cancelled`);
     await this.dataSource.query(`UPDATE video_production SET cancel_requested = true, updated_at = now() WHERE id = $1 AND status IN ('queued', 'rendering')`, [id]);
-    // Not started yet: cancel immediately (the worker never claims a cancelled job).
-    if (prod.jobId && (await this.jobs.cancelQueued(prod.jobId, 'Cancelled by user'))) {
+    // Not started yet: cancel immediately (the worker never claims a cancelled job; a job linked later sees
+    // cancel_requested and stops before rendering).
+    if (!prod.jobId || (await this.jobs.cancelQueued(prod.jobId, 'Cancelled by user'))) {
       await this.dataSource.query(`UPDATE video_production SET status = 'cancelled', error = 'Cancelled by user', updated_at = now() WHERE id = $1 AND status = 'queued'`, [id]);
     }
     await this.audit.record({ actorType: 'user', actorId: actor.userId, workspaceId, action: 'video.production_cancel_requested', subjectType: 'video_production', subjectId: id, outcome: 'success', correlationId: actor.correlationId });
@@ -358,5 +358,31 @@ export class VideoService {
 }
 
 export function toQualityDto(q: QualityReportEntity): QualityReportDto {
-  return { id: q.id, passed: q.passed, checks: q.checks, failures: q.failures, createdAt: q.createdAt.toISOString() };
+  return { id: q.id, passed: q.passed, publishable: q.publishable, checks: q.checks, failures: q.failures, createdAt: q.createdAt.toISOString() };
+}
+
+/**
+ * Creates (idempotently, per production + render attempt) the render job and links it to the production.
+ * The worker also takes ownership by render_attempt (see VideoPipeline.render), so a worker that picks the job up
+ * before this link is written renders normally, and the reconciler re-runs this for productions left unlinked.
+ */
+export async function enqueueRender(
+  jobs: JobsService,
+  dataSource: DataSource,
+  prod: Pick<VideoProductionEntity, 'id' | 'renderAttempt' | 'workspaceId'>,
+  createdBy: string | null,
+  correlationId: string | null,
+) {
+  const { job } = await jobs.enqueue({
+    type: JOB_TYPE_VIDEO_RENDER,
+    queue: QUEUE_RENDER,
+    idempotencyKey: `video.render:${prod.id}:${prod.renderAttempt}`,
+    input: { productionId: prod.id, renderAttempt: prod.renderAttempt },
+    maxAttempts: 3,
+    createdBy,
+    correlationId,
+    workspaceId: prod.workspaceId,
+  });
+  await dataSource.query(`UPDATE video_production SET job_id = $2, updated_at = now() WHERE id = $1 AND render_attempt = $3 AND job_id IS NULL`, [prod.id, job.id, prod.renderAttempt]);
+  return job;
 }

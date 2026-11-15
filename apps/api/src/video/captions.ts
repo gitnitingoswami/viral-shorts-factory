@@ -1,5 +1,5 @@
 import type { CaptionCue } from '@vsf/contracts';
-import { CAPTION, captionMaxChars, wrapWords } from './layout';
+import { CAPTION, captionMaxChars, captionRect, insideBox, SAFE_AREA, wrapWords } from './layout';
 
 /**
  * Splits narration into caption cues of at most CAPTION.maxLines wrapped lines, timed proportionally to their
@@ -40,6 +40,8 @@ export function validateCues(cues: CaptionCue[], videoDurationMs: number): Capti
     if (c.lines.length > CAPTION.maxLines) issues.push({ severity: 'fail', message: `cue ${n}: ${c.lines.length} lines (max ${CAPTION.maxLines})` });
     const longest = Math.max(...c.lines.map((l) => l.length));
     if (longest > maxChars) issues.push({ severity: 'fail', message: `cue ${n}: line of ${longest} chars exceeds the caption area (${maxChars})` });
+    // Independent of the wrapping above: the rectangle actually drawn must sit inside the Shorts safe area.
+    if (!insideBox(captionRect(c.lines), SAFE_AREA)) issues.push({ severity: 'fail', message: `cue ${n}: caption box leaves the safe area` });
     if (c.endMs <= c.startMs) issues.push({ severity: 'fail', message: `cue ${n}: ends before it starts` });
     if (c.startMs < prevEnd) issues.push({ severity: 'fail', message: `cue ${n}: overlaps the previous cue` });
     if (c.endMs > videoDurationMs + 50) issues.push({ severity: 'fail', message: `cue ${n}: ends after the video (${c.endMs} > ${videoDurationMs} ms)` });
@@ -60,12 +62,17 @@ function stamp(ms: number, sep: '.' | ','): string {
   return `${p(h)}:${p(m)}:${p(s)}${sep}${p(r, 3)}`;
 }
 
+/** Cue text is plain text: escape VTT markup/entities (this also removes any "-->" separator inside a cue). */
+export function vttEscape(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /** WebVTT sidecar (dashboard player track and YouTube caption upload). */
 export function toWebVtt(cues: CaptionCue[]): string {
-  const body = cues.map((c, i) => `${i + 1}\n${stamp(c.startMs, '.')} --> ${stamp(c.endMs, '.')}\n${c.lines.join('\n')}`).join('\n\n');
+  const body = cues.map((c, i) => `${i + 1}\n${stamp(c.startMs, '.')} --> ${stamp(c.endMs, '.')}\n${c.lines.map(vttEscape).join('\n')}`).join('\n\n');
   return `WEBVTT\n\n${body}\n`;
 }
 
 export function toSrt(cues: CaptionCue[]): string {
-  return `${cues.map((c, i) => `${i + 1}\n${stamp(c.startMs, ',')} --> ${stamp(c.endMs, ',')}\n${c.lines.join('\n')}`).join('\n\n')}\n`;
+  return `${cues.map((c, i) => `${i + 1}\n${stamp(c.startMs, ',')} --> ${stamp(c.endMs, ',')}\n${c.lines.map((l) => l.replace(/-->/g, '->')).join('\n')}`).join('\n\n')}\n`;
 }

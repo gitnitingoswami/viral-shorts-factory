@@ -3,6 +3,9 @@ import type { RenderSettings } from '@vsf/contracts';
 import type { AppEnv } from '../config/env.schema';
 import { canonicalJson } from '../content/content-utils';
 
+/** Shorts never need more; also bounds the size of one render (≤ 180 s × 20 Mbps ≈ 450 MB). */
+export const MAX_VIDEO_BITRATE_KBPS = 20_000;
+
 export const ALLOWED_FPS = [24, 25, 30, 60] as const;
 /** 9:16 sizes accepted for Shorts (width × height). */
 export const ALLOWED_SIZES: ReadonlyArray<readonly [number, number]> = [
@@ -35,7 +38,7 @@ export function resolveSettings(defaults: RenderSettings, overrides: Partial<Ren
   }
   if (!(ALLOWED_FPS as readonly number[]).includes(s.fps)) errors.push(`fps must be one of ${ALLOWED_FPS.join(', ')}`);
   if (s.codec !== 'h264') errors.push('codec must be h264');
-  if (!Number.isInteger(s.videoBitrateKbps) || s.videoBitrateKbps < 500 || s.videoBitrateKbps > 50_000) errors.push('videoBitrateKbps must be 500..50000');
+  if (!Number.isInteger(s.videoBitrateKbps) || s.videoBitrateKbps < 500 || s.videoBitrateKbps > MAX_VIDEO_BITRATE_KBPS) errors.push(`videoBitrateKbps must be 500..${MAX_VIDEO_BITRATE_KBPS}`);
   if (!Number.isInteger(s.audioBitrateKbps) || s.audioBitrateKbps < 64 || s.audioBitrateKbps > 320) errors.push('audioBitrateKbps must be 64..320');
   if (!Number.isInteger(s.minDurationSec) || !Number.isInteger(s.maxDurationSec) || s.minDurationSec < 1 || s.maxDurationSec > 180 || s.minDurationSec >= s.maxDurationSec) {
     errors.push('duration window must satisfy 1 <= minDurationSec < maxDurationSec <= 180');

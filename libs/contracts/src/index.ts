@@ -606,7 +606,13 @@ export interface QualityCheckDto {
 
 export interface QualityReportDto {
   id: string;
+  /** No failing check: the render is technically sound. */
   passed: boolean;
+  /**
+   * passed AND narrated by a production voice. The only gate publishing may use: draft (eSpeak) and mock voices
+   * are never publishable even when every technical check passes.
+   */
+  publishable: boolean;
   checks: QualityCheckDto[];
   failures: string[];
   createdAt: string;

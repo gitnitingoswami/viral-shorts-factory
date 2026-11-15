@@ -94,12 +94,15 @@ export class MockTtsProvider implements TtsProvider {
   failNext = 0;
   /** Test hook: simulated synthesis latency (honors cancellation). */
   delayMs = 0;
+  /** Test hook: number of synthesize() calls (cache hits never call the provider). */
+  calls = 0;
 
   available(): Promise<{ ok: boolean; version: string | null }> {
     return Promise.resolve({ ok: true, version: 'mock@1' });
   }
 
   async synthesize(text: string, voice: TtsVoice, opts?: { signal?: AbortSignal }): Promise<TtsResult> {
+    this.calls++;
     if (this.delayMs > 0) {
       await new Promise<void>((resolve) => {
         const t = setTimeout(resolve, this.delayMs);

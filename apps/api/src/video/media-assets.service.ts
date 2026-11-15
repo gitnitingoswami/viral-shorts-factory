@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import type { MediaAssetDto, MediaKind } from '@vsf/contracts';
@@ -11,7 +15,8 @@ export interface StoreAssetInput {
   workspaceId: string;
   kind: MediaKind;
   generated: boolean;
-  body: Buffer;
+  /** Small assets as a buffer; large ones (video) as a file path, hashed and uploaded as streams. */
+  body: Buffer | { path: string };
   mime: string;
   ext: string;
   rights: AssetRights;
@@ -66,16 +71,20 @@ export class MediaAssetsService {
     for (const [k, v] of Object.entries(input.rights)) {
       if (k !== 'licenseUrl' && (typeof v !== 'string' || !v.trim())) throw new Error(`Asset rights metadata "${k}" is required`);
     }
-    const hash = sha256(input.body);
+    const body = input.body;
+    const hash = Buffer.isBuffer(body) ? sha256(body) : await sha256File(body.path);
+    const bytes = Buffer.isBuffer(body) ? body.length : (await stat(body.path)).size;
+    const upload = (key: string, mime: string) =>
+      Buffer.isBuffer(body) ? this.storage.putObject(key, body, mime) : this.storage.putObject(key, createReadStream(body.path), mime, bytes);
     const repo = this.dataSource.getRepository(MediaAssetEntity);
     const existing = await repo.findOne({ where: { workspaceId: input.workspaceId, kind: input.kind, sha256: hash } });
     if (existing) {
       // Make sure the object still exists (e.g. a crash between upload and insert on a previous attempt).
-      if (!(await this.storage.headObject(existing.storageKey))) await this.storage.putObject(existing.storageKey, input.body, existing.mime);
+      if (!(await this.storage.headObject(existing.storageKey))) await upload(existing.storageKey, existing.mime);
       return existing;
     }
     const key = `assets/${input.workspaceId}/${input.kind}/${hash.slice(0, 2)}/${hash}.${input.ext}`;
-    await this.storage.putObject(key, input.body, input.mime);
+    await upload(key, input.mime);
     await this.dataSource.query(
       `INSERT INTO media_asset (workspace_id, kind, generated, storage_key, sha256, mime, bytes, duration_ms, width, height,
          source, creator_or_provider, license, license_url, usage_rights, generation_params, provenance, cache_key)
@@ -88,7 +97,7 @@ export class MediaAssetsService {
         key,
         hash,
         input.mime,
-        input.body.length,
+        bytes,
         input.durationMs ?? null,
         input.width ?? null,
         input.height ?? null,
@@ -132,4 +141,10 @@ export class MediaAssetsService {
     }
     return missing;
   }
+}
+
+async function sha256File(path: string): Promise<string> {
+  const h = createHash('sha256');
+  await pipeline(createReadStream(path), h);
+  return h.digest('hex');
 }

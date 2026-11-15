@@ -402,6 +402,7 @@ export function makeProductionDetail(overrides: Partial<VideoProductionDetailDto
         quality: {
           id: 'q1',
           passed: true,
+          publishable: false,
           checks: [
             { id: 'duration', label: 'Duration', status: 'pass', detail: 'Within window', measured: '32.0 s', expected: '20–60 s' },
             { id: 'voice', label: 'Voice quality', status: 'warn', detail: 'Draft voice', measured: 'draft', expected: 'production' },

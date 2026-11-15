@@ -140,7 +140,7 @@ interface LoudnormMeasurement {
 
 /** First pass of two-pass loudnorm (accurate for short, gappy speech where single-pass undershoots). */
 export async function measureLoudness(bins: FfmpegBins, file: string, opts: StepOpts): Promise<LoudnormMeasurement | null> {
-  const { stderr } = await run(bins.ffmpeg, ['-hide_banner', '-nostdin', '-v', 'info', '-i', file, '-af', `loudnorm=I=${LOUDNESS_I}:TP=${LOUDNESS_TP}:LRA=${LOUDNESS_LRA}:print_format=json`, '-f', 'null', '-'], opts);
+  const { stderr } = await run(bins.ffmpeg, ['-hide_banner', '-nostdin', '-nostats', '-v', 'info', '-i', file, '-af', `loudnorm=I=${LOUDNESS_I}:TP=${LOUDNESS_TP}:LRA=${LOUDNESS_LRA}:print_format=json`, '-f', 'null', '-'], opts);
   const json = stderr.slice(stderr.lastIndexOf('{'), stderr.lastIndexOf('}') + 1);
   try {
     const m = JSON.parse(json) as LoudnormMeasurement;
@@ -164,7 +164,7 @@ export async function decodeErrors(bins: FfmpegBins, file: string, opts: StepOpt
 
 /** Integrated loudness (LUFS) of the file's audio via the EBU R128 meter, or null when it cannot be measured. */
 export async function integratedLoudness(bins: FfmpegBins, file: string, opts: StepOpts): Promise<number | null> {
-  const { stderr } = await run(bins.ffmpeg, ['-hide_banner', '-nostdin', '-v', 'info', '-i', file, '-vn', '-af', 'ebur128=framelog=quiet', '-f', 'null', '-'], opts);
+  const { stderr } = await run(bins.ffmpeg, ['-hide_banner', '-nostdin', '-nostats', '-v', 'info', '-i', file, '-vn', '-af', 'ebur128=framelog=quiet', '-f', 'null', '-'], opts);
   const m = [...stderr.matchAll(/I:\s+(-?\d+(?:\.\d+)?) LUFS/g)].pop();
   return m ? Number(m[1]) : null;
 }

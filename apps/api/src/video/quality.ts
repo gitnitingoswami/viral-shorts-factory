@@ -21,6 +21,8 @@ export interface QualityInput {
   simplifiedTransitions: number;
   truncatedCodeLines: number;
   headlineOverflows: number;
+  /** Planned timeline length (sum of scene lengths): both streams must match it. */
+  expectedDurationMs: number;
 }
 
 const check = (id: string, label: string, status: QualityCheckDto['status'], detail: string, measured: string | null = null, expected: string | null = null): QualityCheckDto => ({
@@ -62,9 +64,15 @@ export function evaluateQuality(q: QualityInput): QualityCheckDto[] {
   } else {
     checks.push(check('audio.present', 'Narration audio', a.codec_name === 'aac' ? 'pass' : 'fail', `${a.codec_name}, ${a.sample_rate} Hz, ${a.channels} ch`, a.codec_name, 'aac'));
     if (v) {
-      const drift = Math.abs(durationMs(q.probe, 'video') - durationMs(q.probe, 'audio'));
+      // Narration is placed per scene on the planned timeline, and frames follow the same timeline; each stream
+      // must match the plan (a stream that is shorter, longer or offset shows up here), and each other.
+      const vd = durationMs(q.probe, 'video');
+      const ad = durationMs(q.probe, 'audio');
+      const drift = Math.max(Math.abs(vd - ad), Math.abs(vd - q.expectedDurationMs), Math.abs(ad - q.expectedDurationMs));
       const ok = drift <= MAX_AV_DRIFT_MS;
-      checks.push(check('av.sync', 'Audio/video sync', ok ? 'pass' : 'fail', ok ? 'Audio and video streams end together' : 'Audio and video durations drift apart', `${drift} ms`, `≤ ${MAX_AV_DRIFT_MS} ms`));
+      checks.push(
+        check('av.sync', 'Audio/video sync', ok ? 'pass' : 'fail', ok ? 'Video, narration and the scene timeline line up' : `Streams drift from the timeline (video ${vd} ms, audio ${ad} ms, plan ${q.expectedDurationMs} ms)`, `${drift} ms`, `≤ ${MAX_AV_DRIFT_MS} ms`),
+      );
     }
   }
 
@@ -119,7 +127,12 @@ export function evaluateQuality(q: QualityInput): QualityCheckDto[] {
   return checks;
 }
 
-export function summarize(checks: QualityCheckDto[]): { passed: boolean; failures: string[] } {
+/**
+ * passed = no failing check (the render is technically sound).
+ * publishable = passed and narrated by a production voice: the gate any publishing step must use.
+ */
+export function summarize(checks: QualityCheckDto[]): { passed: boolean; publishable: boolean; failures: string[] } {
   const failures = checks.filter((c) => c.status === 'fail').map((c) => `${c.label}: ${c.detail}`);
-  return { passed: failures.length === 0, failures };
+  const voiceOk = checks.find((c) => c.id === 'voice.publishable')?.status === 'pass';
+  return { passed: failures.length === 0, publishable: failures.length === 0 && voiceOk, failures };
 }
