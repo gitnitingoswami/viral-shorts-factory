@@ -61,7 +61,7 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T03.3 | Pipelines: ideas (dedupe), script + storyboard, fact-check (evidence must be quoted), quality review, code sandbox | Lead Orchestrator | DONE | `apps/api/src/content/` |
 | T03.4 | Approval gates bound to version hash; overrides with reasons; audit | Lead Orchestrator | DONE | `content.service.ts` |
 | T03.5 | Angular: ideas, scripts, workspace, editor, decisions | frontend-engineer (subagent) | DONE | `apps/web/src/app/features/content` (143 web tests) |
-| T03.6 | Live generation with Claude | User (API key) | BLOCKED | Needs `ANTHROPIC_API_KEY` in `.env` (mock used until then) |
+| T03.6 | Live generation with Claude | User (Anthropic credits) | BLOCKED | Key configured and valid; API returns "credit balance is too low" — add credits in console.anthropic.com |
 | T03.7 | Independent review, CI, completion report | Lead Orchestrator + reviewer | IN_PROGRESS | |
 
 ## Follow-ups (tracked, non-blocking)
@@ -79,9 +79,11 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-11 | Dedicated sandbox-runner service so containerized workers never need Docker access (today: docker CLI on the worker host; compose workers report `unavailable`) | Phase 03 / SECURITY_DESIGN T7 | 09 |
 | F-12 | Re-running checks clears earlier claim/code overrides (audit keeps them): warn in the UI before re-run, or carry overrides forward by claim text | Phase 03 review suggestion | 04 |
 | F-13 | Stream the 32k-token script call (`finalMessage()`); system prompts are below the cache minimum (cache_control is a no-op until prompts grow) | Phase 03 review suggestion | 08 |
+| F-14 | Live Claude smoke test (ideas → script → checks) and cost check once `ANTHROPIC_API_KEY` is configured | Phase 03 | When key provided |
 | F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log
+- 2026-11-15 — ANTHROPIC_API_KEY configured; live call blocked by Anthropic: credit balance too low (handled: fast non-retryable failure).
 - 2026-11-15 — Phase 03 implemented with mock LLM; live Claude generation blocked on ANTHROPIC_API_KEY.
 - 2026-11-15 — Phase 02 ACCEPTED; PR #3 merged.
 - 2026-11-15 — Phase 02 implemented; live run against HN/SO/GitHub/RSS succeeded.

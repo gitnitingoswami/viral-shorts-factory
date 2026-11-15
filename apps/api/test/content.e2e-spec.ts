@@ -191,6 +191,29 @@ describe('Content strategy and scripts (e2e, mock LLM + real sandbox)', () => {
     await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(reviewer)).send({ version: 2, decision: 'approved', note: 'Re-approved' }).expect(200);
   }, 120_000);
 
+  it('a redelivered check job takes over a run left half-finished by a crashed worker', async () => {
+    const [ver] = await ds.query<Array<{ id: string }>>(`SELECT id FROM script_version WHERE script_id = $1 AND version = 1`, [scriptId]);
+    await ds.query(`UPDATE script_version SET fact_check_state = 'done', quality_state = 'running', code_state = 'running' WHERE id = $1`, [ver.id]);
+    const out = await app.get(ContentPipeline).runChecks(ver.id, WS, 'redelivered-job', () => Promise.resolve(true));
+    expect(out).not.toHaveProperty('skipped');
+    const [row] = await ds.query<Array<{ f: string; q: string; c: string }>>(
+      `SELECT fact_check_state AS f, quality_state AS q, code_state AS c FROM script_version WHERE id = $1`,
+      [ver.id],
+    );
+    expect(row).toEqual({ f: 'done', q: 'done', c: 'done' });
+    // A completed run is not redone.
+    const again = await app.get(ContentPipeline).runChecks(ver.id, WS, 'redelivered-job', () => Promise.resolve(true));
+    expect(again).toHaveProperty('skipped');
+  }, 120_000);
+
+  it('a worker that lost its lease stops before writing', async () => {
+    const [ver] = await ds.query<Array<{ id: string }>>(`SELECT id FROM script_version WHERE script_id = $1 AND version = 1`, [scriptId]);
+    await ds.query(`UPDATE script_version SET fact_check_state = 'pending', quality_state = 'pending', code_state = 'pending' WHERE id = $1`, [ver.id]);
+    await expect(app.get(ContentPipeline).runChecks(ver.id, WS, 'stale-job', () => Promise.resolve(false))).rejects.toThrow(/lease lost/);
+    const [{ n }] = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM script_claim WHERE script_version_id = $1`, [ver.id]);
+    expect(n).toBe(0);
+  });
+
   it('requires a note to reject or request changes', async () => {
     await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(owner)).send({ version: 2, decision: 'rejected' }).expect(400);
   });

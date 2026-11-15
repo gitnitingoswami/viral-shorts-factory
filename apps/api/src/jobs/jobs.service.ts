@@ -137,8 +137,9 @@ export class JobsService {
   }
 
   /** Records a failed attempt: back to queued while attempts remain, otherwise failed. */
-  async fail(jobId: string, workerId: string, message: string, final: boolean): Promise<void> {
-    await this.repo
+  /** Returns false when this worker no longer holds the lease (another worker owns the job now). */
+  async fail(jobId: string, workerId: string, message: string, final: boolean): Promise<boolean> {
+    const res = await this.repo
       .createQueryBuilder()
       .update()
       .set(
@@ -148,6 +149,7 @@ export class JobsService {
       )
       .where(`id = :jobId AND status = 'running' AND lease_owner = :workerId`, { jobId, workerId })
       .execute();
+    return (res.affected ?? 0) > 0;
   }
 
   /**

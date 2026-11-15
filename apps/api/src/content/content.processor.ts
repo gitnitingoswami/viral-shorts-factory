@@ -67,8 +67,9 @@ export class ContentProcessor extends WorkerHost {
   async onFailed(job: Job<QueuePayload> | undefined, err: Error): Promise<void> {
     if (!job?.data?.jobId) return;
     const final = err instanceof UnrecoverableError || err.name === 'UnrecoverableError' || job.attemptsMade >= (job.opts.attempts ?? 1);
-    await this.jobs.fail(job.data.jobId, WORKER_ID, err.message, final);
-    if (!final) return;
+    const stillOwner = await this.jobs.fail(job.data.jobId, WORKER_ID, err.message, final);
+    // If another worker took over the lease, its run must not be marked failed by this stale one.
+    if (!final || !stillOwner) return;
     const row = await this.jobs.getUnscoped(job.data.jobId);
     if (row?.type === JOB_TYPE_CONTENT_CHECKS && typeof row.input.versionId === 'string') {
       await this.pipeline.markChecksFailed(row.input.versionId);

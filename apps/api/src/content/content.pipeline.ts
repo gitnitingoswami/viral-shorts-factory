@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, Not } from 'typeorm';
+import { DataSource, IsNull, Not } from 'typeorm';
 import type { SourceRef } from '@vsf/contracts';
 import { AuditService } from '../audit/audit.service';
 import { JOB_TYPE_CONTENT_CHECKS, QUEUE_CONTENT } from '../common/constants';
@@ -65,7 +65,14 @@ export class ContentPipeline {
     if (already.some((i) => i.status === 'selected')) {
       return { ideas: already.length, flagged: already.filter((i) => i.duplicateOfId).length };
     }
-    const previous = await m.find(ContentIdeaEntity, { where: { workspaceId, jobId: Not(jobId) }, order: { createdAt: 'DESC' }, take: 500 });
+    const previous = await m.find(ContentIdeaEntity, {
+      where: [
+        { workspaceId, jobId: Not(jobId) },
+        { workspaceId, jobId: IsNull() }, // ideas whose job record was deleted
+      ],
+      order: { createdAt: 'DESC' },
+      take: 500,
+    });
 
     const res = await this.llm.generate(
       {
@@ -207,12 +214,14 @@ export class ContentPipeline {
     const scenes = version.body.scenes;
     const ctx = { workspaceId, relatedType: 'script_version', relatedId: versionId, jobId };
 
-    // Claim the run: only one check run per version at a time (the API queues runs by setting states to pending;
-    // a retried job whose previous attempt died mid-run is also allowed to take over the running states).
+    // Claim the run. The API queues a run by setting all states to pending (and refuses while any is pending or
+    // running), so at most one run is queued per version. A redelivered job takes over any unfinished run, even one
+    // where a crashed worker already finished some steps (all steps are redone). A run with every step done or
+    // failed is complete and is skipped. Lease ownership (beat) keeps a stale worker from writing.
     const started = await this.dataSource.transaction(async (tx) => {
       const claimed = await tx.query<[unknown[], number]>(
         `UPDATE script_version SET fact_check_state = 'running', quality_state = 'running', code_state = 'running'
-         WHERE id = $1 AND fact_check_state IN ('pending', 'running') AND quality_state IN ('pending', 'running') AND code_state IN ('pending', 'running')
+         WHERE id = $1 AND (fact_check_state IN ('pending', 'running') OR quality_state IN ('pending', 'running') OR code_state IN ('pending', 'running'))
          RETURNING id`,
         [versionId],
       );
@@ -265,7 +274,9 @@ export class ContentPipeline {
             sourceRef: verified && src ? { signalId: src.signalId, url: src.url, title: src.title } : null,
           };
         });
+      await beat(35);
       if (rows.length) await m.insert(ScriptClaimEntity, rows);
+      await beat(38);
       await m.update(ScriptVersionEntity, { id: versionId }, { factCheckState: 'done' });
       outcome.factCheck = `done (${rows.length} claims)`;
     } catch (err) {
@@ -289,6 +300,7 @@ export class ContentPipeline {
         },
         ctx,
       );
+      await beat(55);
       await m.insert(ScriptReviewEntity, {
         scriptVersionId: versionId,
         kind: 'ai_quality',
@@ -298,6 +310,7 @@ export class ContentPipeline {
         llmModel: res.model,
         promptRef: PROMPTS.quality.ref,
       });
+      await beat(58);
       await m.update(ScriptVersionEntity, { id: versionId }, { qualityState: 'done' });
       outcome.quality = 'done';
     } catch (err) {
@@ -312,6 +325,7 @@ export class ContentPipeline {
       for (const s of scenes) {
         if (!s.code) continue;
         const r = await this.sandbox.run(s.code.language, s.code.source);
+        await beat(60 + 30 * ((s.index + 1) / scenes.length));
         await m.insert(CodeVerificationEntity, {
           scriptVersionId: versionId,
           sceneIndex: s.index,
@@ -322,8 +336,8 @@ export class ContentPipeline {
           stderr: r.stderr,
           durationMs: r.durationMs,
         });
-        await beat(60 + 30 * ((s.index + 1) / scenes.length));
       }
+      await beat(95);
       await m.update(ScriptVersionEntity, { id: versionId }, { codeState: 'done' });
       outcome.code = 'done';
     } catch (err) {
