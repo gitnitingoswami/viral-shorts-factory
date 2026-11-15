@@ -120,9 +120,21 @@ export function closestIdea<T extends { id: string; title: string; hook: string 
  * Anti-hallucination guard for fact-checks: evidence must literally appear in a supplied source (whitespace and
  * case-insensitive); otherwise the verdict is downgraded to unsupported.
  */
-export function evidenceFound(evidence: string | null, sourceTexts: string[]): boolean {
+export function evidenceFound(evidence: string | null, sourceTexts: string[], claim?: string): boolean {
   if (!evidence) return false;
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
   const e = norm(evidence);
-  return e.length >= 3 && sourceTexts.some((t) => norm(t).includes(e));
+  const evidenceTokens = tokenize(e);
+  // A meaningful quote: at least 20 characters or 4 content words (not "node" or "stars").
+  if (e.length < MIN_EVIDENCE_CHARS && evidenceTokens.length < MIN_EVIDENCE_TOKENS) return false;
+  if (!sourceTexts.some((t) => norm(t).includes(e))) return false;
+  // The quote must be about the claim: share at least one content word with it.
+  if (claim !== undefined) {
+    const claimTokens = new Set(tokenize(claim));
+    if (!evidenceTokens.some((t) => claimTokens.has(t))) return false;
+  }
+  return true;
 }
+
+export const MIN_EVIDENCE_CHARS = 20;
+export const MIN_EVIDENCE_TOKENS = 4;

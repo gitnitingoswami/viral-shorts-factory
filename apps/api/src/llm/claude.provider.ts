@@ -19,7 +19,8 @@ export class ClaudeProvider implements LlmProvider {
     /** Injectable for tests; production always builds the official client. */
     client?: Anthropic,
   ) {
-    this.client = client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 180_000 });
+    // One SDK retry; the job retry policy handles the rest (each attempt is metered, so retries stay bounded).
+    this.client = client ?? new Anthropic({ apiKey, maxRetries: 1, timeout: 180_000 });
   }
 
   async generate<T>(req: LlmRequest<T>): Promise<LlmResponse<T>> {

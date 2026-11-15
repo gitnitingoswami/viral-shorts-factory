@@ -87,6 +87,12 @@ describe('ideas and evidence', () => {
     expect(evidenceFound('10x faster builds', ['TypeScript 6.1 released'])).toBe(false);
     expect(evidenceFound(null, ['x'])).toBe(false);
     expect(evidenceFound('ab', ['ab'])).toBe(false);
+    // Too short to be meaningful even though it appears in the source.
+    expect(evidenceFound('node', ['Node.js streams in node 24'])).toBe(false);
+    expect(evidenceFound('stars', ['repo (stars: 450)'])).toBe(false);
+    // Must share a content word with the claim it supports.
+    expect(evidenceFound('TypeScript 6.1 released today', ['TypeScript 6.1 released today'], 'Docker images got smaller')).toBe(false);
+    expect(evidenceFound('TypeScript 6.1 released today', ['TypeScript 6.1 released today'], 'TypeScript 6.1 is out')).toBe(true);
   });
 });
 

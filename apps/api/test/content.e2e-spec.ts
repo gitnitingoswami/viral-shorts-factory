@@ -3,6 +3,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import type { ScriptVersionDto, StoryboardSceneDto } from '@vsf/contracts';
+import { ContentPipeline } from '../src/content/content.pipeline';
 import { createTestApp, createUser, createWorker, resetTestDatabase, waitFor } from './helpers';
 
 const OWNER = { email: 'owner@content.test', password: 'owner-password-123' };
@@ -171,6 +172,25 @@ describe('Content strategy and scripts (e2e, mock LLM + real sandbox)', () => {
     expect(actions).toEqual(expect.arrayContaining(['script.claim_overridden', 'script.decision', 'script.version_created', 'content.idea_selected']));
   });
 
+  it('re-running checks on an approved version revokes the approval; overlapping runs are refused (T4)', async () => {
+    const before = await request(http).get(`/api/content/scripts/${scriptId}`).set(auth(owner)).expect(200);
+    expect(before.body).toMatchObject({ status: 'approved', approvedVersion: 2 });
+    await request(http).post(`/api/content/scripts/${scriptId}/versions/2/checks`).set(auth(owner)).expect(202);
+    await request(http).post(`/api/content/scripts/${scriptId}/versions/2/checks`).set(auth(owner)).expect(409);
+    const after = await request(http).get(`/api/content/scripts/${scriptId}`).set(auth(owner)).expect(200);
+    expect(after.body).toMatchObject({ status: 'in_review', approvedVersion: null });
+    // Approval is refused while the new checks are pending/running (gates re-evaluated under lock).
+    const res = await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(reviewer)).send({ version: 2, decision: 'approved' });
+    if (res.status === 409) expect(JSON.stringify(res.body.message)).toMatch(/is (pending|running)|unsupported/);
+    const done = await waitChecks(scriptId, 2);
+    expect(done.checks).toEqual({ factCheck: 'done', quality: 'done', code: 'done' });
+    // Overrides are cleared by a re-run, so the unsupported claim blocks approval again until re-overridden.
+    expect(done.approvalBlockers.join(' ')).toMatch(/unsupported/);
+    const claim = done.claims.find((c) => c.verdict === 'unsupported')!;
+    await request(http).post(`/api/content/claims/${claim.id}/override`).set(auth(owner)).send({ reason: 'Phrased as opinion in the voice-over' }).expect(200);
+    await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(reviewer)).send({ version: 2, decision: 'approved', note: 'Re-approved' }).expect(200);
+  }, 120_000);
+
   it('requires a note to reject or request changes', async () => {
     await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(owner)).send({ version: 2, decision: 'rejected' }).expect(400);
   });
@@ -199,6 +219,16 @@ describe('Content strategy and scripts (e2e, mock LLM + real sandbox)', () => {
     expect(r.body.status).toBe('overridden');
     await request(http).post(`/api/content/code-checks/${byScene.get(4)!.id}/override`).set(auth(owner)).send({ reason: 'Nothing to override here' }).expect(409);
   }, 120_000);
+
+  it('regenerating ideas for the same job does not compare against or point at its own earlier ideas', async () => {
+    const t = await seedTopic('Retry topic');
+    expect((await ideasFor(t, 'ideas-retry-0001')).status).toBe('completed');
+    const [{ id: jobId }] = await ds.query<Array<{ id: string }>>(`SELECT id FROM job WHERE input->>'topicId' = $1`, [t]);
+    const pipeline = app.get(ContentPipeline);
+    await expect(pipeline.generateIdeas(t, WS, jobId)).resolves.toMatchObject({ ideas: 5 });
+    const rows = await ds.query<Array<{ dup: string | null }>>(`SELECT duplicate_of_id AS dup FROM content_idea WHERE job_id = $1`, [jobId]);
+    expect(rows).toHaveLength(5);
+  });
 
   it('fails fast (no retries) on malformed output and refusals; nothing partial is stored', async () => {
     for (const marker of ['[mock:malformed]', '[mock:refusal]']) {

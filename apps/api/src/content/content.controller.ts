@@ -169,6 +169,8 @@ export class ContentController {
   }
 
   @Roles('owner', 'reviewer')
+  // Each version triggers high-effort LLM checks and sandbox runs (T15).
+  @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
   @Post('content/scripts/:id/versions')
   createVersion(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: CreateVersionBody, @Req() req: AuthedRequest): Promise<ScriptVersionDto> {
     return this.content.createVersion(id, { ...body, scenes: body.scenes.map((s) => ({ ...s, code: s.code ?? null })) }, actorOf(user, req));

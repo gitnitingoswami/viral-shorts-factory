@@ -101,7 +101,10 @@ describe('pricing and prompt hygiene', () => {
   it('computes cost in cents, rounding up', () => {
     expect(costMinor('claude-opus-5-5', { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(400);
     expect(costMinor('claude-opus-5-5', { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(1);
-    expect(costMinor('unknown-model', { inputTokens: 0, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(2000);
+    // Unknown models are priced at the highest known rate (errs safe); fallback models use their own rate.
+    expect(costMinor('unknown-model', { inputTokens: 0, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(5000);
+    expect(costMinor('claude-opus-5', { inputTokens: 0, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(2500);
+    expect(costMinor('claude-opus-5-5', { inputTokens: 0, outputTokens: 1_000_000, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(2000);
     expect(estimateMinor('claude-opus-5-5', 4000, 10_000)).toBe(Math.ceil(((1000 * 4 + 10_000 * 20) / 1e6) * 100));
   });
 

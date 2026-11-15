@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, Not } from 'typeorm';
 import type { SourceRef } from '@vsf/contracts';
 import { AuditService } from '../audit/audit.service';
 import { JOB_TYPE_CONTENT_CHECKS, QUEUE_CONTENT } from '../common/constants';
@@ -21,6 +21,12 @@ import { FactCheckSchema, IdeasSchema, QualitySchema, ScriptSchema } from './sch
 import { createHash } from 'node:crypto';
 
 export type Heartbeat = (progress: number) => Promise<boolean>;
+
+export class LeaseLostError extends Error {
+  constructor() {
+    super('Job lease lost; another worker may have taken over');
+  }
+}
 
 interface SourceItem {
   signalId: string;
@@ -54,7 +60,12 @@ export class ContentPipeline {
     const topic = await m.findOneByOrFail(TrendTopicEntity, { id: topicId, workspaceId });
     const niche = await m.findOneByOrFail(NicheEntity, { id: topic.nicheId });
     const sources = await this.sourcesForTopic(topic.id);
-    const previous = await m.find(ContentIdeaEntity, { where: { workspaceId }, order: { createdAt: 'DESC' }, take: 500 });
+    // A retry of this job must not compare against (or point at) the ideas it wrote on an earlier attempt.
+    const already = await m.find(ContentIdeaEntity, { where: { jobId } });
+    if (already.some((i) => i.status === 'selected')) {
+      return { ideas: already.length, flagged: already.filter((i) => i.duplicateOfId).length };
+    }
+    const previous = await m.find(ContentIdeaEntity, { where: { workspaceId, jobId: Not(jobId) }, order: { createdAt: 'DESC' }, take: 500 });
 
     const res = await this.llm.generate(
       {
@@ -196,17 +207,31 @@ export class ContentPipeline {
     const scenes = version.body.scenes;
     const ctx = { workspaceId, relatedType: 'script_version', relatedId: versionId, jobId };
 
-    await this.dataSource.transaction(async (tx) => {
+    // Claim the run: only one check run per version at a time (the API queues runs by setting states to pending;
+    // a retried job whose previous attempt died mid-run is also allowed to take over the running states).
+    const started = await this.dataSource.transaction(async (tx) => {
+      const claimed = await tx.query<[unknown[], number]>(
+        `UPDATE script_version SET fact_check_state = 'running', quality_state = 'running', code_state = 'running'
+         WHERE id = $1 AND fact_check_state IN ('pending', 'running') AND quality_state IN ('pending', 'running') AND code_state IN ('pending', 'running')
+         RETURNING id`,
+        [versionId],
+      );
+      if (!claimed[1]) return false;
       await tx.delete(ScriptClaimEntity, { scriptVersionId: versionId });
       await tx.delete(CodeVerificationEntity, { scriptVersionId: versionId });
       await tx.delete(ScriptReviewEntity, { scriptVersionId: versionId, kind: 'ai_quality' });
-      await tx.update(ScriptVersionEntity, { id: versionId }, { factCheckState: 'running', qualityState: 'running', codeState: 'running' });
+      return true;
     });
+    if (!started) return { skipped: 'checks already completed for this run' };
+    const beat = async (p: number) => {
+      if (!(await heartbeat(p))) throw new LeaseLostError();
+    };
 
     const outcome: Record<string, string> = {};
 
     // 1) fact-check
     try {
+      await beat(10);
       const res = await this.llm.generate(
         {
           task: 'factcheck',
@@ -225,11 +250,12 @@ export class ContentPipeline {
       );
       const byUrl = new Map(sources.map((s) => [s.url, s]));
       const rows = res.data.claims
-        .filter((c) => c.sceneIndex >= 0 && c.sceneIndex < scenes.length)
+        // Out-of-range scene indexes are kept (clamped) and can't be marked supported below.
+        .map((c) => ({ ...c, outOfRange: c.sceneIndex < 0 || c.sceneIndex >= scenes.length, sceneIndex: Math.min(Math.max(c.sceneIndex, 0), scenes.length - 1) }))
         .map((c) => {
           const src = c.sourceUrl ? byUrl.get(c.sourceUrl) : undefined;
           // Downgrade any verdict whose quote does not literally appear in the cited source.
-          const verified = c.verdict !== 'unsupported' && src !== undefined && evidenceFound(c.evidence, [src.text]);
+          const verified = !c.outOfRange && c.verdict !== 'unsupported' && src !== undefined && evidenceFound(c.evidence, [src.text], c.text);
           return {
             scriptVersionId: versionId,
             sceneIndex: c.sceneIndex,
@@ -243,10 +269,11 @@ export class ContentPipeline {
       await m.update(ScriptVersionEntity, { id: versionId }, { factCheckState: 'done' });
       outcome.factCheck = `done (${rows.length} claims)`;
     } catch (err) {
+      if (err instanceof LeaseLostError) throw err;
       await m.update(ScriptVersionEntity, { id: versionId }, { factCheckState: 'failed' });
       outcome.factCheck = `failed: ${errMsg(err)}`;
     }
-    await heartbeat(40);
+    await beat(40);
 
     // 2) quality review (advisory)
     try {
@@ -274,10 +301,11 @@ export class ContentPipeline {
       await m.update(ScriptVersionEntity, { id: versionId }, { qualityState: 'done' });
       outcome.quality = 'done';
     } catch (err) {
+      if (err instanceof LeaseLostError) throw err;
       await m.update(ScriptVersionEntity, { id: versionId }, { qualityState: 'failed' });
       outcome.quality = `failed: ${errMsg(err)}`;
     }
-    await heartbeat(60);
+    await beat(60);
 
     // 3) code verification (sandbox)
     try {
@@ -294,11 +322,12 @@ export class ContentPipeline {
           stderr: r.stderr,
           durationMs: r.durationMs,
         });
-        await heartbeat(60 + 30 * ((s.index + 1) / scenes.length));
+        await beat(60 + 30 * ((s.index + 1) / scenes.length));
       }
       await m.update(ScriptVersionEntity, { id: versionId }, { codeState: 'done' });
       outcome.code = 'done';
     } catch (err) {
+      if (err instanceof LeaseLostError) throw err;
       await m.update(ScriptVersionEntity, { id: versionId }, { codeState: 'failed' });
       outcome.code = `failed: ${errMsg(err)}`;
     }

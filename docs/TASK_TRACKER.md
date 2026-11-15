@@ -77,6 +77,8 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-08 | Scoring fairness: topics outside the YouTube-checked top 15 lose the competition weight via confidence shrinkage; consider excluding it from confidence for unchecked topics | Phase 02 review suggestion | 06 (analytics calibration) |
 | F-10 | YouTube daily cap is read-then-record; several concurrent workers could slightly exceed it. Use an atomic reservation when workers scale out | Phase 02 review round 2 | 08 |
 | F-11 | Dedicated sandbox-runner service so containerized workers never need Docker access (today: docker CLI on the worker host; compose workers report `unavailable`) | Phase 03 / SECURITY_DESIGN T7 | 09 |
+| F-12 | Re-running checks clears earlier claim/code overrides (audit keeps them): warn in the UI before re-run, or carry overrides forward by claim text | Phase 03 review suggestion | 04 |
+| F-13 | Stream the 32k-token script call (`finalMessage()`); system prompts are below the cache minimum (cache_control is a no-op until prompts grow) | Phase 03 review suggestion | 08 |
 | F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log

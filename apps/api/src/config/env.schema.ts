@@ -26,7 +26,8 @@ export const envSchema = z
       .default('false')
       .refine((v) => v !== 'true', "TRUST_PROXY must be a hop count or proxy CIDR list, never 'true'"),
     /** Job lease: a running job whose lease expires (worker died or stalled) may be reclaimed. */
-    JOB_LEASE_MS: z.coerce.number().int().min(1000).default(5 * 60_000),
+    // Longer than the worst case between heartbeats (one LLM call: 180 s × 2 attempts).
+    JOB_LEASE_MS: z.coerce.number().int().min(1000).default(10 * 60_000),
 
     // ---- Phase 02: research sources (all optional; missing credentials → source skipped) ----
     YOUTUBE_API_KEY: z.union([z.literal(''), z.string().min(20)]).optional(),

@@ -18,7 +18,7 @@ const EXECUTABLE: Partial<Record<CodeLanguage, string>> = { javascript: '/tmp/s.
 /** Docker arguments for a locked-down, single-use container (SECURITY_DESIGN T7). */
 export function sandboxArgs(name: string, image: string, file: string): string[] {
   return [
-    'run', '-i', '--rm', '--name', name,
+    'run', '-i', '--rm', '--pull=never', '--name', name,
     '--network', 'none',
     '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m',
     '--memory', '256m', '--memory-swap', '256m', '--pids-limit', '64', '--cpus', '0.5',
@@ -76,7 +76,8 @@ export class SandboxService {
       });
       child.on('close', (code) => {
         const durationMs = Date.now() - started;
-        if (code === 125 || /Cannot connect to the Docker daemon|Unable to find image.*not found/i.test(stderr)) {
+        // 125 = docker itself failed (daemon down, image not pre-pulled with --pull=never): not the snippet's fault.
+        if (code === 125 || /Cannot connect to the Docker daemon|No such image|Unable to find image/i.test(stderr)) {
           finish({ status: 'unavailable', stdout: '', stderr: stderr.slice(0, 500), durationMs });
         } else {
           finish({ status: code === 0 ? 'passed' : 'failed', stdout, stderr, durationMs });

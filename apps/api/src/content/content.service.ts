@@ -153,10 +153,14 @@ export class ContentService {
     const m = this.dataSource.manager;
     const idea = await m.findOneBy(ContentIdeaEntity, { id: ideaId, workspaceId: actor.workspaceId });
     if (!idea) throw new NotFoundException('Idea not found');
-    if (idea.status === 'discarded') throw new ConflictException('Idea was discarded');
+    // Atomic transition: a concurrent discard can't win after this succeeds (and vice versa).
+    const moved = await m.query<[unknown[], number]>(
+      `UPDATE content_idea SET status = 'selected', updated_at = now() WHERE id = $1 AND status IN ('proposed', 'selected') RETURNING id`,
+      [ideaId],
+    );
+    if (!moved[1]) throw new ConflictException('Idea was discarded');
     await m.createQueryBuilder().insert().into(VideoScriptEntity).values({ workspaceId: actor.workspaceId, ideaId, title: idea.title, status: 'drafting' }).orIgnore().execute();
     const script = await m.findOneByOrFail(VideoScriptEntity, { ideaId });
-    if (idea.status !== 'selected') await m.update(ContentIdeaEntity, { id: ideaId }, { status: 'selected' });
     const { job } = await this.jobs.enqueue({
       type: JOB_TYPE_CONTENT_SCRIPT,
       queue: QUEUE_CONTENT,
@@ -176,9 +180,12 @@ export class ContentService {
     const m = this.dataSource.manager;
     const idea = await m.findOneBy(ContentIdeaEntity, { id: ideaId, workspaceId: actor.workspaceId });
     if (!idea) throw new NotFoundException('Idea not found');
-    if (idea.status === 'selected') throw new ConflictException('A selected idea cannot be discarded');
+    const moved = await m.query<[unknown[], number]>(
+      `UPDATE content_idea SET status = 'discarded', updated_at = now() WHERE id = $1 AND status IN ('proposed', 'discarded') RETURNING id`,
+      [ideaId],
+    );
+    if (!moved[1]) throw new ConflictException('A selected idea cannot be discarded');
     idea.status = 'discarded';
-    await m.save(idea);
     const topic = await m.findOneByOrFail(TrendTopicEntity, { id: idea.topicId });
     await this.audit.record({ actorType: 'user', actorId: actor.userId, workspaceId: actor.workspaceId, action: 'content.idea_discarded', subjectType: 'content_idea', subjectId: ideaId, outcome: 'success', correlationId: actor.correlationId });
     return toIdeaDto(idea, topic.title);
@@ -221,7 +228,7 @@ export class ContentService {
     const title = body.title.trim();
     const saved = await this.dataSource.transaction(async (tx) => {
       const bumped = await tx.query<[Array<{ current_version: number }>, number]>(
-        `UPDATE video_script SET current_version = current_version + 1, status = 'in_review', title = $3, updated_at = now()
+        `UPDATE video_script SET current_version = current_version + 1, status = 'in_review', approved_version = NULL, title = $3, updated_at = now()
          WHERE id = $1 AND current_version = $2 AND current_version >= 1 RETURNING current_version`,
         [scriptId, body.baseVersion, title],
       );
@@ -252,10 +259,30 @@ export class ContentService {
     await this.script(actor.workspaceId, scriptId);
     const v = await this.dataSource.manager.findOneBy(ScriptVersionEntity, { scriptId, version });
     if (!v) throw new NotFoundException('Version not found');
-    if ([v.factCheckState, v.qualityState, v.codeState].includes('running')) throw new ConflictException('Checks are already running');
-    await this.dataSource.manager.update(ScriptVersionEntity, { id: v.id }, { factCheckState: 'pending', qualityState: 'pending', codeState: 'pending' });
+    const revoked = await this.dataSource.transaction(async (tx) => {
+      // Same lock order as decide(): script row, then version row.
+      const [s] = await tx.query<Array<{ status: string; approved_version: number | null }>>(
+        `SELECT status, approved_version FROM video_script WHERE id = $1 FOR UPDATE`,
+        [scriptId],
+      );
+      await tx.query(`SELECT id FROM script_version WHERE id = $1 FOR UPDATE`, [v.id]);
+      // Atomic claim of a new check run: refused while one is queued or running (no overlapping runs).
+      const claimed = await tx.query<[unknown[], number]>(
+        `UPDATE script_version SET fact_check_state = 'pending', quality_state = 'pending', code_state = 'pending'
+         WHERE id = $1 AND fact_check_state NOT IN ('pending', 'running') AND quality_state NOT IN ('pending', 'running')
+           AND code_state NOT IN ('pending', 'running') RETURNING id`,
+        [v.id],
+      );
+      if (!claimed[1]) throw new ConflictException('Checks are already queued or running for this version');
+      // Re-checking an approved version revokes the approval until it passes again.
+      if (s.status === 'approved' && s.approved_version === version) {
+        await tx.query(`UPDATE video_script SET status = 'in_review', approved_version = NULL, updated_at = now() WHERE id = $1`, [scriptId]);
+        return true;
+      }
+      return false;
+    });
     const { job } = await this.pipeline.enqueueChecks(v.id, actor.workspaceId, `${v.id}:${nonce}`, actor.userId);
-    await this.audit.record({ actorType: 'user', actorId: actor.userId, workspaceId: actor.workspaceId, action: 'script.checks_requested', subjectType: 'script_version', subjectId: v.id, outcome: 'success', correlationId: actor.correlationId });
+    await this.audit.record({ actorType: 'user', actorId: actor.userId, workspaceId: actor.workspaceId, action: 'script.checks_requested', subjectType: 'script_version', subjectId: v.id, outcome: 'success', correlationId: actor.correlationId, details: { approvalRevoked: revoked } });
     return job;
   }
 
@@ -291,33 +318,47 @@ export class ContentService {
   async decide(scriptId: string, body: ScriptDecisionRequest, actor: Actor): Promise<ScriptDto> {
     const script = await this.script(actor.workspaceId, scriptId);
     if (body.version !== script.currentVersion) throw new ConflictException(`Only the current version (${script.currentVersion}) can be decided`);
-    const v = await this.dataSource.manager.findOneByOrFail(ScriptVersionEntity, { scriptId, version: body.version });
-    if (body.decision === 'approved') {
-      const dto = await this.versionDto(script, v);
-      if (dto.approvalBlockers.length) throw new ConflictException(dto.approvalBlockers);
-    }
     const note = body.note?.trim() || null;
     if (body.decision !== 'approved' && !note) throw new BadRequestException('A note is required when rejecting or requesting changes');
 
-    await this.dataSource.transaction(async (tx) => {
+    const v = await this.dataSource.transaction(async (tx) => {
+      // Lock the script and version rows, then re-evaluate every gate inside the transaction, so a concurrent
+      // edit, check re-run or override cannot slip between the gate check and the status change (T4).
+      const [s] = await tx.query<Array<{ current_version: number }>>(`SELECT current_version FROM video_script WHERE id = $1 FOR UPDATE`, [scriptId]);
+      if (s.current_version !== body.version) throw new ConflictException(`Only the current version (${s.current_version}) can be decided`);
+      const locked = await tx.findOneOrFail(ScriptVersionEntity, { where: { scriptId, version: body.version }, lock: { mode: 'pessimistic_write' } });
+      if (body.decision === 'approved') {
+        const [claims, codeChecks] = await Promise.all([
+          tx.find(ScriptClaimEntity, { where: { scriptVersionId: locked.id } }),
+          tx.find(CodeVerificationEntity, { where: { scriptVersionId: locked.id } }),
+        ]);
+        const blockers = approvalBlockers({
+          isCurrent: true,
+          estDurationSec: locked.estDurationSec,
+          scenes: locked.body.scenes,
+          checks: { factCheck: locked.factCheckState, quality: locked.qualityState, code: locked.codeState },
+          claims,
+          codeChecks,
+        });
+        if (blockers.length) throw new ConflictException(blockers);
+      }
       await tx.insert(ScriptReviewEntity, {
-        scriptVersionId: v.id,
+        scriptVersionId: locked.id,
         kind: 'human',
         scores: null,
         issues: [],
         decision: body.decision,
         note,
         reviewerId: actor.userId,
-        approvedHash: body.decision === 'approved' ? v.contentHash : null,
+        approvedHash: body.decision === 'approved' ? locked.contentHash : null,
       });
       const status = body.decision === 'approved' ? 'approved' : body.decision === 'rejected' ? 'rejected' : 'in_review';
-      // Guard against a concurrent edit between the check above and this update.
-      const res = await tx.query<[unknown[], number]>(
-        `UPDATE video_script SET status = $3, approved_version = CASE WHEN $3 = 'approved' THEN $2::int ELSE approved_version END, updated_at = now()
-         WHERE id = $1 AND current_version = $2 RETURNING id`,
+      // Invariant: approved_version is set only while status = 'approved'.
+      await tx.query(
+        `UPDATE video_script SET status = $3, approved_version = CASE WHEN $3 = 'approved' THEN $2::int ELSE NULL END, updated_at = now() WHERE id = $1`,
         [scriptId, body.version, status],
       );
-      if (!res[1]) throw new ConflictException('The script changed while deciding; reload and try again');
+      return locked;
     });
     await this.audit.record({ actorType: 'user', actorId: actor.userId, workspaceId: actor.workspaceId, action: 'script.decision', subjectType: 'video_script', subjectId: scriptId, outcome: 'success', correlationId: actor.correlationId, details: { version: body.version, decision: body.decision, hash: v.contentHash, note } });
     return toScriptDto(await this.script(actor.workspaceId, scriptId));
