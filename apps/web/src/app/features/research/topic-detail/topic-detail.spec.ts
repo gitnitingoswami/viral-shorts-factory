@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { makeTopicDetail, signInAs } from '../../../testing/fixtures';
+import { makeLlmStatus, makeTopicDetail, signInAs } from '../../../testing/fixtures';
 import { TopicDetail } from './topic-detail';
 
 describe('TopicDetail', () => {
@@ -70,5 +70,21 @@ describe('TopicDetail', () => {
       .flush({ statusCode: 500, error: 'x', message: 'boom' }, { status: 500, statusText: 'Error' });
     await settle();
     expect(el.querySelector('[data-testid="topic-status"]')?.textContent?.trim()).toBe('new');
+  });
+
+  it('offers Generate ideas with the mock banner to owners on approved topics', async () => {
+    httpMock.expectOne('/api/research/topics/t1').flush(makeTopicDetail());
+    fixture.destroy();
+    signInAs('owner');
+    fixture = TestBed.createComponent(TopicDetail);
+    fixture.componentRef.setInput('id', 't1');
+    el = fixture.nativeElement as HTMLElement;
+    await settle();
+    httpMock.expectOne('/api/research/topics/t1').flush(makeTopicDetail({ status: 'approved' }));
+    await settle();
+    httpMock.expectOne('/api/content/llm-status').flush(makeLlmStatus('mock'));
+    await settle();
+    expect(el.querySelector('[data-testid="generate-ideas-btn"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="mock-banner"]')?.textContent).toContain('AI provider not configured');
   });
 });

@@ -53,6 +53,17 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T02.7 | Live smoke run against real public sources | Lead Orchestrator | DONE | 5/5 sources ok incl. YouTube; quality fixes (HN tags, GitHub clones/forks, sparse-score shrinkage) |
 | T02.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review ACCEPT (round 2); CI 4/4 on 2b2e294 |
 
+## Phase 03 — AI content strategy and scripts
+| ID | Task | Owner | Status | Output |
+|---|---|---|---|---|
+| T03.1 | LLM layer: Claude provider (structured output, effort, refusal fallbacks), mock provider, metering + budget guard | Lead Orchestrator (backend-engineer role) | DONE | `apps/api/src/llm/` |
+| T03.2 | Data model: ideas, scripts, immutable versions, claims, code checks, reviews | Lead Orchestrator (database-engineer role) | DONE | `1763350000000-ContentScripts.ts` |
+| T03.3 | Pipelines: ideas (dedupe), script + storyboard, fact-check (evidence must be quoted), quality review, code sandbox | Lead Orchestrator | DONE | `apps/api/src/content/` |
+| T03.4 | Approval gates bound to version hash; overrides with reasons; audit | Lead Orchestrator | DONE | `content.service.ts` |
+| T03.5 | Angular: ideas, scripts, workspace, editor, decisions | frontend-engineer (subagent) | DONE | `apps/web/src/app/features/content` (143 web tests) |
+| T03.6 | Live generation with Claude | User (API key) | BLOCKED | Needs `ANTHROPIC_API_KEY` in `.env` (mock used until then) |
+| T03.7 | Independent review, CI, completion report | Lead Orchestrator + reviewer | IN_PROGRESS | |
+
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
 |---|---|---|---|
@@ -65,9 +76,11 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | F-07 | 3 moderate npm advisories (typeorm → minimatch), no high/critical | npm audit | Re-check each phase |
 | F-08 | Scoring fairness: topics outside the YouTube-checked top 15 lose the competition weight via confidence shrinkage; consider excluding it from confidence for unchecked topics | Phase 02 review suggestion | 06 (analytics calibration) |
 | F-10 | YouTube daily cap is read-then-record; several concurrent workers could slightly exceed it. Use an atomic reservation when workers scale out | Phase 02 review round 2 | 08 |
+| F-11 | Dedicated sandbox-runner service so containerized workers never need Docker access (today: docker CLI on the worker host; compose workers report `unavailable`) | Phase 03 / SECURITY_DESIGN T7 | 09 |
 | F-09 | Pin the SSRF-checked IP for the actual connection (undici Agent `connect.lookup`) to close the DNS-rebinding window | Phase 02 review suggestion | 09 |
 
 ## Change log
+- 2026-11-15 — Phase 03 implemented with mock LLM; live Claude generation blocked on ANTHROPIC_API_KEY.
 - 2026-11-15 — Phase 02 ACCEPTED; PR #3 merged.
 - 2026-11-15 — Phase 02 implemented; live run against HN/SO/GitHub/RSS succeeded.
 - 2026-11-15 — YouTube Data API key configured by the user (`YOUTUBE_API_KEY` in local `.env`); verified with one search call; live run: 5/5 sources ok, 15 competition checks, 30-day expiry, quota recorded, key absent from logs.

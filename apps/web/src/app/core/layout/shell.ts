@@ -21,6 +21,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { path: '/channels', label: 'Channels' },
   { path: '/jobs', label: 'Jobs' },
   { path: '/research', label: 'Research' },
+  { path: '/content', label: 'Content' },
   { path: '/audit', label: 'Audit log', ownerOnly: true },
 ];
 

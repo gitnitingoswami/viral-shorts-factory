@@ -19,6 +19,7 @@ import { JobsModule, QueueRootModule } from './jobs/jobs.module';
 import { UsersModule } from './users/users.module';
 import { BudgetModule } from './budget/budget.module';
 import { ResearchModule } from './research/research.module';
+import { ContentModule } from './content/content.module';
 
 /** HTTP API process. */
 @Module({
@@ -43,6 +44,7 @@ import { ResearchModule } from './research/research.module';
     JobsModule,
     BudgetModule,
     ResearchModule,
+    ContentModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -7,6 +7,8 @@ import type { TopicDecisionRequest, TrendTopicDetailDto } from '@vsf/contracts';
 import { ResearchApiService } from '../../../core/api/research-api.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { apiErrorMessage } from '../../../core/http/api-error';
+import { GenerateIdeas } from '../../content/generate-ideas';
+import { MockBanner } from '../../content/mock-banner';
 import { DecisionControls } from '../decision-controls';
 import { safeHref } from '../report/safe-markdown';
 import { sourceLabel, withDecision } from '../research-labels';
@@ -22,6 +24,8 @@ import { ScoreBreakdown } from '../score-breakdown';
     MatProgressSpinnerModule,
     ScoreBreakdown,
     DecisionControls,
+    GenerateIdeas,
+    MockBanner,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './topic-detail.html',
@@ -40,6 +44,7 @@ export class TopicDetail implements OnInit {
   protected readonly deciding = signal(false);
   protected readonly announcement = signal('');
   protected readonly canDecide = computed(() => this.auth.hasRole(['owner', 'reviewer']));
+  protected readonly isOwner = this.auth.isOwner;
 
   protected readonly sourceLabel = sourceLabel;
   protected readonly safeHref = safeHref;

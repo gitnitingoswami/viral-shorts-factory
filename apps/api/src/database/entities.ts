@@ -118,10 +118,12 @@ export class AuditEventEntity {
   @Column('jsonb', { default: () => "'{}'::jsonb" }) details: Record<string, unknown>;
 }
 
+import { CONTENT_ENTITIES } from './content.entities';
 import { RESEARCH_ENTITIES } from './research.entities';
 
 export const ALL_ENTITIES = [
   ...RESEARCH_ENTITIES,
+  ...CONTENT_ENTITIES,
   WorkspaceEntity,
   UserAccountEntity,
   RefreshSessionEntity,

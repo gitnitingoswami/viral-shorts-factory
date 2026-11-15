@@ -2,6 +2,11 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import type {
   AuthTokenResponse,
+  ContentIdeaDto,
+  JobDto,
+  LlmStatusDto,
+  ScriptDetailDto,
+  ScriptVersionDto,
   NicheDto,
   ResearchSourceDto,
   TrendCollectionDto,
@@ -120,6 +125,143 @@ export function makeTopicDetail(overrides: Partial<TrendTopicDetailDto> = {}): T
         retrievedAt: '2026-11-15T00:00:00.000Z',
       },
     ],
+    ...overrides,
+  };
+}
+
+export function makeJob(overrides: Partial<JobDto> = {}): JobDto {
+  return {
+    id: 'j1',
+    type: 'content.ideas',
+    queue: 'content',
+    idempotencyKey: 'k1',
+    status: 'queued',
+    attempt: 0,
+    maxAttempts: 3,
+    progress: 0,
+    error: null,
+    correlationId: null,
+    createdAt: '2026-11-15T00:00:00.000Z',
+    updatedAt: '2026-11-15T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeLlmStatus(provider: LlmStatusDto['provider'] = 'claude'): LlmStatusDto {
+  return { provider, model: provider === 'mock' ? 'mock-1' : 'claude-sonnet', configured: provider !== 'mock' };
+}
+
+export function makeIdea(overrides: Partial<ContentIdeaDto> = {}): ContentIdeaDto {
+  return {
+    id: 'i1',
+    topicId: 't1',
+    topicTitle: 'Node.js 24 permission model',
+    title: 'Lock down fs access in 30 seconds',
+    audience: 'Node.js backend devs',
+    angle: 'Security by default',
+    hook: 'Your script can read ~/.ssh. Here is the fix.',
+    valueProposition: 'One flag blocks surprise file access',
+    format: 'quick-tip',
+    targetDurationSec: 40,
+    sourceRefs: [{ signalId: 's1', url: 'https://nodejs.org/api/permissions.html', title: 'Node docs' }],
+    similarityScore: 0.2,
+    duplicateOfId: null,
+    status: 'proposed',
+    llm: { model: 'claude-sonnet', promptRef: 'ideas@1', mock: false },
+    createdAt: '2026-11-15T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeScriptDetail(overrides: Partial<ScriptDetailDto> = {}): ScriptDetailDto {
+  return {
+    id: 'sc1',
+    ideaId: 'i1',
+    title: 'Lock down fs access',
+    status: 'in_review',
+    currentVersion: 2,
+    approvedVersion: null,
+    createdAt: '2026-11-15T00:00:00.000Z',
+    updatedAt: '2026-11-15T01:00:00.000Z',
+    versions: [
+      { version: 1, authorType: 'ai', createdAt: '2026-11-15T00:00:00.000Z' },
+      { version: 2, authorType: 'human', createdAt: '2026-11-15T01:00:00.000Z' },
+    ],
+    ...overrides,
+  };
+}
+
+export function makeVersion(overrides: Partial<ScriptVersionDto> = {}): ScriptVersionDto {
+  return {
+    id: 'v2',
+    scriptId: 'sc1',
+    version: 2,
+    authorType: 'human',
+    hash: 'abcdef0123456789abcdef',
+    title: 'Lock down fs access',
+    scenes: [
+      {
+        index: 0,
+        durationSec: 8,
+        narration: 'Your script can read your SSH keys.',
+        onScreenText: 'Danger!',
+        visualConcept: 'Terminal with ~/.ssh listing',
+        code: null,
+        transition: 'cut',
+        assetBrief: 'Dark terminal',
+      },
+      {
+        index: 1,
+        durationSec: 20,
+        narration: 'Run node with the permission flag.',
+        onScreenText: '--permission',
+        visualConcept: 'Code close-up',
+        code: { language: 'shell', source: 'node --permission app.js\necho done', highlightLines: [1] },
+        transition: 'fade',
+        assetBrief: 'Code card',
+      },
+    ],
+    wordCount: 80,
+    estDurationSec: 32,
+    claims: [
+      {
+        id: 'cl1',
+        sceneIndex: 1,
+        text: 'Node 24 ships a stable permission model.',
+        verdict: 'unsupported',
+        evidence: null,
+        sourceRef: { signalId: 's1', url: 'https://nodejs.org/api/permissions.html', title: 'Node docs' },
+        overrideReason: null,
+      },
+    ],
+    codeChecks: [
+      {
+        id: 'cc1',
+        sceneIndex: 1,
+        language: 'shell',
+        status: 'not_executable',
+        stdout: '',
+        stderr: '',
+        durationMs: null,
+        overrideReason: null,
+      },
+    ],
+    reviews: [
+      {
+        id: 'r1',
+        kind: 'ai_quality',
+        scores: { originality: 4, repetition: 5, clarity: 4, pacing: 3, accessibility: 4, platform: 5, policyRisk: 5 },
+        issues: ['Pacing dips in scene 2'],
+        decision: null,
+        note: null,
+        reviewerId: null,
+        createdAt: '2026-11-15T01:00:00.000Z',
+      },
+    ],
+    checks: { factCheck: 'done', quality: 'done', code: 'done' },
+    approvalBlockers: [],
+    llm: null,
+    createdAt: '2026-11-15T01:00:00.000Z',
     ...overrides,
   };
 }

@@ -40,6 +40,16 @@ export const envSchema = z
       .default(
         'https://nodejs.org/en/feed/blog.xml,https://devblogs.microsoft.com/typescript/feed/,https://blog.angular.dev/feed,https://github.blog/changelog/feed/',
       ),
+    // ---- Phase 03: LLM (optional; without a key the deterministic mock provider is used and labelled as mock) ----
+    ANTHROPIC_API_KEY: z.union([z.literal(''), z.string().min(20)]).optional(),
+    LLM_MODEL: z.string().default('claude-opus-5-5'),
+    /** Force the mock provider even when a key exists (tests, demos). */
+    LLM_FORCE_MOCK: bool.default(false),
+    /** Code sandbox: 'docker' runs snippets in a locked-down container; 'disabled' marks checks unavailable. */
+    CODE_SANDBOX: z.enum(['docker', 'disabled']).default('docker'),
+    CODE_SANDBOX_IMAGE: z.string().default('node:24.22.3-alpine'),
+    CODE_SANDBOX_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+
     /** Variable AI/API spend guard (USD per calendar month). */
     MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(100),
 

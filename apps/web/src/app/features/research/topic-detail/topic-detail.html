@@ -33,6 +33,15 @@
     <app-decision-controls [topic]="t" [busy]="deciding()" (decide)="decide($event)" />
   }
 
+  @if (isOwner() && t.status === 'approved') {
+    <section class="content-actions" aria-labelledby="content-heading">
+      <h2 id="content-heading" class="section-title">Content</h2>
+      <app-mock-banner />
+      <app-generate-ideas [topic]="t" />
+      <a class="ideas-link" routerLink="/content/ideas" [queryParams]="{ topicId: t.id }">Existing ideas for this topic</a>
+    </section>
+  }
+
   <section aria-labelledby="breakdown-heading">
     <h2 id="breakdown-heading" class="section-title">Score breakdown</h2>
     <app-score-breakdown [topic]="t" />

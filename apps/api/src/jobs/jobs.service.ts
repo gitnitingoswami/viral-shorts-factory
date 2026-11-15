@@ -5,7 +5,7 @@ import { Queue } from 'bullmq';
 import { In, LessThan, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import type { JobDto, Page } from '@vsf/contracts';
-import { DEFAULT_WORKSPACE_ID, QUEUE_MAINTENANCE, QUEUE_RESEARCH } from '../common/constants';
+import { DEFAULT_WORKSPACE_ID, QUEUE_CONTENT, QUEUE_MAINTENANCE, QUEUE_RESEARCH } from '../common/constants';
 import { JobEntity } from '../database/entities';
 
 export interface EnqueueInput {
@@ -64,10 +64,12 @@ export class JobsService {
     @InjectRepository(JobEntity) private readonly repo: Repository<JobEntity>,
     @InjectQueue(QUEUE_MAINTENANCE) maintenanceQueue: Queue,
     @InjectQueue(QUEUE_RESEARCH) researchQueue: Queue,
+    @InjectQueue(QUEUE_CONTENT) contentQueue: Queue,
   ) {
     this.queues = new Map([
       [QUEUE_MAINTENANCE, maintenanceQueue],
       [QUEUE_RESEARCH, researchQueue],
+      [QUEUE_CONTENT, contentQueue],
     ]);
   }
 
@@ -92,7 +94,8 @@ export class JobsService {
         `id = :jobId AND attempt < max_attempts AND (status = 'queued' OR (status = 'running' AND (lease_until IS NULL OR lease_until < now())))`,
         { jobId },
       )
-      .returning(['id', 'type', 'workspace_id', 'input', 'attempt'])
+      // String form = raw SQL column list (the array form treats entries as entity property names).
+      .returning('id, type, workspace_id, input, attempt')
       .execute();
     const row = (result.raw as Array<{ id: string; type: string; workspace_id: string; input: Record<string, unknown>; attempt: number }>)[0];
     if (!row) {

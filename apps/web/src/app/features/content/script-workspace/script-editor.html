@@ -1,0 +1,137 @@
+<form [formGroup]="form" (ngSubmit)="submit()" aria-labelledby="editor-heading" novalidate data-testid="script-editor">
+  <div class="head">
+    <h2 id="editor-heading" class="section-title">Edit script (based on v{{ baseVersion() }})</h2>
+    <span class="muted" aria-live="polite">Total {{ totalSec() }} s · {{ scenes.length }} scenes</span>
+  </div>
+
+  @if (stale()) {
+    <div class="alert" role="alert" data-testid="stale-alert">
+      <p>
+        Someone saved a newer version while you were editing. Your changes were not saved. Reload the latest version
+        to continue (unsaved edits will be lost).
+      </p>
+      <button mat-flat-button type="button" data-testid="reload-latest" (click)="reloadRequested.emit()">
+        Reload latest version
+      </button>
+    </div>
+  }
+  @if (saveError(); as e) {
+    <p class="error" role="alert" data-testid="save-error">{{ e }}</p>
+  }
+  @if (submitted() && form.invalid) {
+    <p class="error" role="alert" data-testid="form-invalid">Fix the highlighted fields before saving.</p>
+  }
+
+  <div class="field">
+    <label for="edit-title">Title</label>
+    <input id="edit-title" type="text" formControlName="title" data-testid="edit-title"
+      [attr.aria-invalid]="show(form.controls.title, 'required')" />
+    @if (show(form.controls.title, 'required')) {
+      <span class="error">Title is required.</span>
+    }
+  </div>
+
+  <ol class="scene-list" formArrayName="scenes">
+    @for (scene of scenes.controls; track scene; let i = $index; let first = $first; let last = $last) {
+      <li [formGroupName]="i" class="scene" [attr.data-edit-scene]="i">
+        <fieldset>
+          <legend>Scene {{ i + 1 }}</legend>
+          <div class="scene-tools">
+            <button mat-button type="button" [disabled]="first" (click)="move(i, -1)"
+              [attr.aria-label]="'Move scene ' + (i + 1) + ' up'">Up</button>
+            <button mat-button type="button" [disabled]="last" (click)="move(i, 1)"
+              [attr.aria-label]="'Move scene ' + (i + 1) + ' down'">Down</button>
+            <button mat-button type="button" data-testid="remove-scene" [disabled]="scenes.length === 1"
+              (click)="removeScene(i)" [attr.aria-label]="'Remove scene ' + (i + 1)">Remove</button>
+          </div>
+
+          <div class="grid">
+            <div class="field">
+              <label [for]="'dur-' + i">Duration (s, {{ minSec }}–{{ maxSec }})</label>
+              <input [id]="'dur-' + i" type="number" [min]="minSec" [max]="maxSec" step="1" formControlName="durationSec"
+                data-testid="edit-duration" [attr.aria-invalid]="scene.controls.durationSec.invalid && (scene.controls.durationSec.touched || submitted())" />
+              @if (show(scene.controls.durationSec, 'min') || show(scene.controls.durationSec, 'max') || show(scene.controls.durationSec, 'required')) {
+                <span class="error" data-testid="duration-error">Duration must be {{ minSec }}–{{ maxSec }} seconds.</span>
+              }
+            </div>
+            <div class="field">
+              <label [for]="'tr-' + i">Transition</label>
+              <select [id]="'tr-' + i" formControlName="transition">
+                @for (t of transitions; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label [for]="'nar-' + i">Narration</label>
+            <textarea [id]="'nar-' + i" rows="3" formControlName="narration" data-testid="edit-narration"
+              [attr.aria-invalid]="show(scene.controls.narration, 'required')"></textarea>
+            @if (show(scene.controls.narration, 'required')) {
+              <span class="error" data-testid="narration-error">Narration is required.</span>
+            }
+          </div>
+          <div class="field">
+            <label [for]="'ost-' + i">On-screen text</label>
+            <input [id]="'ost-' + i" type="text" formControlName="onScreenText" />
+          </div>
+          <div class="field">
+            <label [for]="'vis-' + i">Visual concept</label>
+            <input [id]="'vis-' + i" type="text" formControlName="visualConcept" />
+          </div>
+          <div class="field">
+            <label [for]="'ab-' + i">Asset brief</label>
+            <input [id]="'ab-' + i" type="text" formControlName="assetBrief" />
+          </div>
+
+          <label class="check">
+            <input type="checkbox" formControlName="hasCode" data-testid="edit-has-code" />
+            Include a code block
+          </label>
+          @if (scene.controls.hasCode.value) {
+            <div class="grid">
+              <div class="field">
+                <label [for]="'lang-' + i">Language</label>
+                <select [id]="'lang-' + i" formControlName="language" data-testid="edit-language">
+                  @for (l of languages; track l) {
+                    <option [value]="l">{{ l }}</option>
+                  }
+                </select>
+              </div>
+              <div class="field">
+                <label [for]="'hl-' + i">Highlight lines (comma list, e.g. 1, 3)</label>
+                <input [id]="'hl-' + i" type="text" formControlName="highlightLines" data-testid="edit-highlight"
+                  [attr.aria-invalid]="show(scene, 'highlightFormat') || show(scene, 'highlightRange')" />
+                @if (show(scene, 'highlightFormat')) {
+                  <span class="error">Use positive line numbers separated by commas.</span>
+                } @else if (show(scene, 'highlightRange')) {
+                  <span class="error">Highlighted lines must exist in the code.</span>
+                }
+              </div>
+            </div>
+            <div class="field">
+              <label [for]="'src-' + i">Code ({{ lines(scene) }}/{{ maxLines }} lines)</label>
+              <textarea [id]="'src-' + i" class="mono" rows="6" spellcheck="false" formControlName="source"
+                data-testid="edit-source" [attr.aria-invalid]="show(scene, 'tooManyLines') || show(scene, 'codeRequired')"></textarea>
+              @if (show(scene, 'tooManyLines')) {
+                <span class="error" data-testid="lines-error">Code must be at most {{ maxLines }} lines.</span>
+              } @else if (show(scene, 'codeRequired')) {
+                <span class="error">Enter code or untick “Include a code block”.</span>
+              }
+            </div>
+          }
+        </fieldset>
+      </li>
+    }
+  </ol>
+
+  <div class="footer">
+    <button mat-stroked-button type="button" data-testid="add-scene" (click)="addScene()">Add scene</button>
+    <span class="spacer"></span>
+    <button mat-button type="button" (click)="cancelled.emit()">Cancel</button>
+    <button mat-flat-button type="submit" data-testid="save-version" [disabled]="saving()">
+      {{ saving() ? 'Saving…' : 'Save as new version' }}
+    </button>
+  </div>
+</form>
