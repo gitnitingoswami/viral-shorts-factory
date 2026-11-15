@@ -76,6 +76,18 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T04.7 | Cloud TTS provider | User (choose provider + credential) | BLOCKED | Draft eSpeak voice until chosen |
 | T04.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review round 2 blockers fixed; CI green; `tasks/reports/PHASE_04_COMPLETION_REPORT.md` |
 
+## Phase 05 — Social publishing engine
+| ID | Task | Owner | Status | Output |
+|---|---|---|---|---|
+| T05.1 | Verify YouTube Data API + Google OAuth docs (upload, quota, privacy default, publishAt, resumable protocol) | Lead Orchestrator | DONE | `tasks/plans/PHASE_05_PLAN.md` |
+| T05.2 | OAuth: state + PKCE, encrypted tokens, refresh/revoke/disconnect | Lead Orchestrator (security role) | IN_PROGRESS | `apps/api/src/publishing/` |
+| T05.3 | Data model: publishing jobs, approvals, upload attempts, published content | Lead Orchestrator (database role) | IN_PROGRESS | migration `Publishing` |
+| T05.4 | Upload worker: resumable, verify-before-retry, remote verification, quota cap | Lead Orchestrator | TODO | |
+| T05.5 | Angular: connected account, metadata + preview, approval queue, calendar, job status | frontend-engineer (subagent) | TODO | |
+| T05.6 | Google OAuth client + credentials in `.env` | User | BLOCKED | See plan "External access needed" |
+| T05.7 | First private test upload to @Codehaksy | User approval | BLOCKED | After T05.6 |
+| T05.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | TODO | |
+
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
 |---|---|---|---|
