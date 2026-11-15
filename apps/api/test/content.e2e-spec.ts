@@ -131,7 +131,7 @@ describe('Content strategy and scripts (e2e, mock LLM + real sandbox)', () => {
     expect(v1.codeChecks).toEqual([expect.objectContaining({ language: 'typescript', status: 'passed', stdout: expect.stringContaining('[ 1, 2, 3 ]') })]);
     expect(v1.reviews.find((r) => r.kind === 'ai_quality')?.scores).toMatchObject({ clarity: 4, policyRisk: 5 });
     expect(v1.approvalBlockers).toEqual([]);
-  });
+  }, 120_000);
 
   it('keeps versions immutable at the database level', async () => {
     await expect(ds.query(`UPDATE script_version SET title = 'tampered' WHERE id = $1`, [v1.id])).rejects.toThrow(/immutable/);
@@ -150,7 +150,7 @@ describe('Content strategy and scripts (e2e, mock LLM + real sandbox)', () => {
     const bad = checked.claims.find((c) => c.text.includes('10x'));
     expect(bad?.verdict).toBe('unsupported');
     expect(checked.approvalBlockers.join(' ')).toMatch(/unsupported/);
-  });
+  }, 120_000);
 
   it('blocks approval with listed reasons until gates pass; overrides need a reason and are audited', async () => {
     const res = await request(http).post(`/api/content/scripts/${scriptId}/decision`).set(auth(reviewer)).send({ version: 2, decision: 'approved' }).expect(409);

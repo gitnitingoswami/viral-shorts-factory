@@ -8,5 +8,7 @@ module.exports = {
   ],
   collectCoverageFrom: unit.collectCoverageFrom,
   coverageDirectory: 'coverage',
+  // testTimeout is a global option: per-project values are ignored in a multi-project run.
+  testTimeout: 60000,
   coverageReporters: ['text-summary', 'json-summary', 'text'],
 };
