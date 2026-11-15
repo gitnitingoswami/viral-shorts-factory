@@ -85,6 +85,8 @@ export class TrendTopicEntity {
   @Column('text', { array: true }) sources: ResearchSourceKey[];
   @Column('int', { name: 'signal_count' }) signalCount: number;
   @Column('timestamptz', { name: 'newest_signal_at', nullable: true }) newestSignalAt: Date | null;
+  /** When YouTube-derived values in `breakdown` must be redacted (30-day retention). */
+  @Column('timestamptz', { name: 'youtube_expires_at', nullable: true }) youtubeExpiresAt: Date | null;
   @Column('text', { default: 'new' }) status: TopicStatus;
   @Column('uuid', { name: 'decided_by', nullable: true }) decidedBy: string | null;
   @Column('timestamptz', { name: 'decided_at', nullable: true }) decidedAt: Date | null;

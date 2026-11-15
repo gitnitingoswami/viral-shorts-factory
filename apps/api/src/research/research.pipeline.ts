@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
+import { DataSource, EntityManager, In, LessThan } from 'typeorm';
 import type { ResearchSourceKey, SourceRunResult } from '@vsf/contracts';
 import { BudgetExceededError, BudgetService } from '../budget/budget.service';
 import { YOUTUBE_DATA_TTL_DAYS } from '../common/constants';
+import type { AppEnv } from '../config/env.schema';
 import {
   NicheEntity,
   RawSignalEntity,
@@ -15,7 +17,7 @@ import {
 } from '../database/research.entities';
 import { RESEARCH_ADAPTERS, ResearchAdapters, scrub } from './adapters.provider';
 import { buildReport } from './report';
-import { clusterSignals, isRelevant, ScoredTopic, scoreClusters, SignalInput, tokenize } from './scoring';
+import { clusterSignals, isRelevant, ScoredTopic, scoreClusters, scoreFromBreakdown, SignalInput, tokenize } from './scoring';
 import { FetchedSignal } from './sources';
 
 /** Max topics checked against YouTube per run (each costs one search.list call). */
@@ -38,12 +40,16 @@ export class LeaseLostError extends Error {
 @Injectable()
 export class ResearchPipeline {
   private readonly logger = new Logger(ResearchPipeline.name);
+  private readonly youtubeDailyCap: number;
 
   constructor(
     private readonly dataSource: DataSource,
     private readonly budget: BudgetService,
     @Inject(RESEARCH_ADAPTERS) private readonly adapters: ResearchAdapters,
-  ) {}
+    config: ConfigService<AppEnv, true>,
+  ) {
+    this.youtubeDailyCap = config.get('YOUTUBE_DAILY_SEARCH_CAP', { infer: true });
+  }
 
   async run(collectionId: string, heartbeat: Heartbeat, jobId: string | null = null): Promise<{ status: string; topics: number }> {
     const m = this.dataSource.manager;
@@ -61,6 +67,7 @@ export class ResearchPipeline {
     const ctx = { keywords: niche.keywords, windowStart: collection.windowStart, windowEnd: collection.windowEnd, now };
     const results: SourceRunResult[] = [];
     const fetched: FetchedSignal[] = [];
+    let leaseLost = false;
 
     await Promise.all(
       this.adapters.discovery.map(async (adapter) => {
@@ -82,8 +89,11 @@ export class ResearchPipeline {
           this.logger.warn({ source: adapter.key, collectionId, message }, 'Research source failed');
           results.push({ source: adapter.key, status: 'failed', signals: 0, durationMs: Date.now() - started, message });
         }
+        // Keep the lease alive while slow sources finish.
+        if (!(await heartbeat(10 + 7 * results.length))) leaseLost = true;
       }),
     );
+    if (leaseLost) throw new LeaseLostError();
     if (!(await heartbeat(40))) throw new LeaseLostError();
 
     // ---- 2. relevance filter, clustering, first-pass scoring ----
@@ -95,7 +105,7 @@ export class ResearchPipeline {
     let scored = scoreClusters(clusters, { now, rules, history });
 
     // ---- 3. YouTube competition for the strongest candidates (budget-guarded, quota-limited) ----
-    const competition = await this.youtubeCompetition(scored, collection, results, jobId);
+    const competition = await this.youtubeCompetition(scored, collection, results, jobId, heartbeat);
     if (competition) scored = scoreClusters(clusters, { now, rules, history, youtubeCompetition: competition });
     if (!(await heartbeat(70))) throw new LeaseLostError();
 
@@ -136,8 +146,40 @@ export class ResearchPipeline {
     );
   }
 
-  /** Deletes YouTube-derived data older than the policy window (YouTube API Services: 30 days). */
+  /**
+   * Fails collections whose job has failed (exhausted attempts, lease expired on the final attempt, or
+   * claim refused) so no collection stays `running` forever. Returns the number of collections updated.
+   */
+  async failOrphanedCollections(): Promise<number> {
+    const res = await this.dataSource.query<[unknown[], number]>(
+      `UPDATE trend_collection c SET status = 'failed', finished_at = now(), updated_at = now()
+       FROM job j
+       WHERE c.job_id = j.id AND j.status = 'failed' AND c.status IN ('queued', 'running')`,
+    );
+    return Array.isArray(res) && typeof res[1] === 'number' ? res[1] : 0;
+  }
+
+  /**
+   * YouTube API Services policy: data about other channels is deleted within 30 days. Removes expired YouTube
+   * metric rows and redacts YouTube-derived values from topics (competition component nulled, score and
+   * confidence recomputed without it). Reports never contain YouTube numbers (see report.ts).
+   */
   async purgeExpired(): Promise<number> {
+    const expiredTopics = await this.dataSource.manager.find(TrendTopicEntity, {
+      where: { youtubeExpiresAt: LessThan(new Date()) },
+      take: 1000,
+    });
+    for (const t of expiredTopics) {
+      const breakdown = t.breakdown.map((b) =>
+        b.component === 'competition' ? { ...b, value: null, explanation: 'YouTube data deleted after the 30-day retention period' } : b,
+      );
+      const totals = scoreFromBreakdown(breakdown);
+      await this.dataSource.manager.update(
+        TrendTopicEntity,
+        { id: t.id },
+        { breakdown, score: totals.score, confidence: totals.confidence, missingComponents: totals.missingComponents, youtubeExpiresAt: null },
+      );
+    }
     const res = await this.dataSource.manager
       .createQueryBuilder()
       .delete()
@@ -150,7 +192,7 @@ export class ResearchPipeline {
       .from(RawSignalEntity)
       .where('expires_at IS NOT NULL AND expires_at < now()')
       .execute();
-    return (res.affected ?? 0) + (sig.affected ?? 0);
+    return (res.affected ?? 0) + (sig.affected ?? 0) + expiredTopics.length;
   }
 
   private async youtubeCompetition(
@@ -158,6 +200,7 @@ export class ResearchPipeline {
     collection: TrendCollectionEntity,
     results: SourceRunResult[],
     jobId: string | null,
+    heartbeat: Heartbeat,
   ): Promise<Map<string, number> | undefined> {
     const yt = this.adapters.youtube;
     const started = Date.now();
@@ -173,16 +216,26 @@ export class ResearchPipeline {
       results.push({ source: 'youtube', status: 'skipped', signals: 0, durationMs: 0, message: 'monthly budget exhausted' });
       return undefined;
     }
-    const top = [...scored].sort((a, b) => b.score - a.score).slice(0, YOUTUBE_TOPICS_PER_RUN);
+    // Daily cap across all runs protects the search.list quota bucket from repeated manual runs.
+    const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    const usedToday = await this.budget.unitsSince(collection.workspaceId, 'youtube', 'search.list call', dayStart);
+    const allowance = Math.min(YOUTUBE_TOPICS_PER_RUN, Math.max(0, this.youtubeDailyCap - usedToday));
+    if (allowance === 0) {
+      results.push({ source: 'youtube', status: 'skipped', signals: 0, durationMs: 0, message: 'daily YouTube search cap reached' });
+      return undefined;
+    }
+    const top = [...scored].sort((a, b) => b.score - a.score).slice(0, allowance);
     const counts = new Map<string, number>();
     let calls = 0;
     try {
       for (const t of top) {
         calls++;
         counts.set(t.slug, await yt.countShorts(tokenize(t.title).slice(0, 6).join(' '), collection.windowStart));
+        if (!(await heartbeat(45 + Math.round((25 * calls) / top.length)))) throw new LeaseLostError();
       }
       results.push({ source: 'youtube', status: 'ok', signals: counts.size, durationMs: Date.now() - started });
     } catch (err) {
+      if (err instanceof LeaseLostError) throw err;
       const message = scrub(err instanceof Error ? err.message : 'error', this.adapters.secrets);
       results.push({ source: 'youtube', status: counts.size ? 'ok' : 'failed', signals: counts.size, durationMs: Date.now() - started, message });
     } finally {
@@ -288,6 +341,7 @@ export class ResearchPipeline {
           sources: t.sources,
           signalCount: t.signals.length,
           newestSignalAt: t.newestSignalAt,
+          youtubeExpiresAt: competition?.has(t.slug) ? ytExpiry : null,
           status: 'new',
         }),
       );
@@ -318,9 +372,9 @@ export class ResearchPipeline {
         metrics.push({
           topicId: topic.id,
           signalId: null,
-          name: 'youtube.shorts_last_7d',
+          name: 'youtube.short_videos_7d',
           value: comp,
-          unit: 'videos',
+          unit: 'videos (<4 min, YouTube search estimate)',
           sourceKey: 'youtube',
           observedAt: now,
           retrievedAt: now,

@@ -15,6 +15,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -96,17 +97,24 @@ export class ResearchController {
 
   @Roles('owner')
   @Post('niches')
-  createNiche(@CurrentUser() user: AuthUser, @Body() body: CreateNicheBody): Promise<NicheDto> {
-    return this.research.createNiche(user.workspaceId, body);
+  createNiche(@CurrentUser() user: AuthUser, @Body() body: CreateNicheBody, @Req() req: AuthedRequest): Promise<NicheDto> {
+    return this.research.createNiche(user.workspaceId, body, { userId: user.id, correlationId: correlationIdOf(req) });
   }
 
   @Roles('owner')
   @Patch('niches/:id')
-  updateNiche(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: UpdateNicheBody): Promise<NicheDto> {
-    return this.research.updateNiche(user.workspaceId, id, body);
+  updateNiche(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateNicheBody,
+    @Req() req: AuthedRequest,
+  ): Promise<NicheDto> {
+    return this.research.updateNiche(user.workspaceId, id, body, { userId: user.id, correlationId: correlationIdOf(req) });
   }
 
   @Roles('owner')
+  // Each run can spend YouTube quota; the daily cap is the hard limit, this throttle stops runaway clients.
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
   @Post('research/runs')
   @HttpCode(HttpStatus.ACCEPTED)
   startRun(@CurrentUser() user: AuthUser, @Body() body: StartRunBody, @Req() req: AuthedRequest): Promise<TrendCollectionDto> {
@@ -182,7 +190,12 @@ export class ResearchController {
   @Roles('owner', 'reviewer')
   @Post('research/topics/:id/decision')
   @HttpCode(HttpStatus.OK)
-  decide(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() body: DecisionBody): Promise<TrendTopicDto> {
-    return this.research.decide(user.workspaceId, id, user.id, body);
+  decide(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: DecisionBody,
+    @Req() req: AuthedRequest,
+  ): Promise<TrendTopicDto> {
+    return this.research.decide(user.workspaceId, id, user.id, body, correlationIdOf(req));
   }
 }

@@ -228,6 +228,27 @@ export interface ScoredTopic {
 const round = (n: number, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
 const fmt = (n: number) => (n >= 100 ? Math.round(n).toString() : n.toFixed(1));
 
+/**
+ * Final score from a breakdown: weighted mean over available components, then evidence shrinkage.
+ * Renormalizing over available components alone would let a data-poor topic (e.g. a release note with only
+ * freshness + relevance) outrank well-evidenced ones, so the mean is scaled by
+ * SPARSE_FLOOR + (1 - SPARSE_FLOOR) * confidence. Also used when YouTube data is redacted after 30 days.
+ */
+export function scoreFromBreakdown(details: ScoreComponentDetail[]): {
+  score: number;
+  confidence: number;
+  missingComponents: ScoreComponent[];
+} {
+  const available = details.filter((d) => d.value !== null);
+  const wSum = available.reduce((a, d) => a + d.weight, 0);
+  const weighted = wSum > 0 ? available.reduce((a, d) => a + d.weight * (d.value as number), 0) / wSum : 0;
+  return {
+    score: round(weighted * (SPARSE_FLOOR + (1 - SPARSE_FLOOR) * wSum)),
+    confidence: round(wSum, 3),
+    missingComponents: details.filter((d) => d.value === null).map((d) => d.component),
+  };
+}
+
 export function scoreClusters(clusters: Cluster[], ctx: ScoringContext): ScoredTopic[] {
   const { now } = ctx;
 
@@ -293,7 +314,7 @@ export function scoreClusters(clusters: Cluster[], ctx: ScoringContext): ScoredT
       explanation:
         comp === undefined
           ? 'YouTube data unavailable (API key not configured, quota, or topic not checked)'
-          : `${comp} YouTube Shorts on this topic in the last 7 days (fewer is better)`,
+          : `~${comp} short videos (<4 min) on YouTube in the last 7 days, per YouTube search estimate (fewer is better)`,
     });
 
     // demand
@@ -324,22 +345,16 @@ export function scoreClusters(clusters: Cluster[], ctx: ScoringContext): ScoredT
           : 'No previous collections for this niche yet',
     });
 
-    const available = details.filter((d) => d.value !== null);
-    const wSum = available.reduce((a, d) => a + d.weight, 0);
-    const weighted = wSum > 0 ? available.reduce((a, d) => a + d.weight * (d.value as number), 0) / wSum : 0;
-    // Evidence shrinkage: renormalizing over available components alone would let a data-poor topic
-    // (e.g. a release note with only freshness + relevance) outrank well-evidenced ones. Scale by
-    // SPARSE_FLOOR + (1 - SPARSE_FLOOR) * confidence so missing data lowers the score proportionally.
-    const score = weighted * (SPARSE_FLOOR + (1 - SPARSE_FLOOR) * wSum);
+    const totals = scoreFromBreakdown(details);
 
     return {
       slug: c.slug,
       title: c.title,
       signals: c.signals,
-      score: round(score),
-      confidence: round(wSum, 3),
+      score: totals.score,
+      confidence: totals.confidence,
       breakdown: details,
-      missingComponents: details.filter((d) => d.value === null).map((d) => d.component),
+      missingComponents: totals.missingComponents,
       stale: newestAge > STALE_AFTER_DAYS,
       newestSignalAt: new Date(newest),
       sources: [...new Set(c.signals.map((s) => s.source))].sort(),

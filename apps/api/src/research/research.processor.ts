@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue, OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
@@ -40,7 +40,11 @@ export class ResearchProcessor extends WorkerHost {
 
     const { jobId } = job.data as QueuePayload;
     const claimed = await this.jobs.claim(jobId, WORKER_ID, this.leaseMs);
-    if (!claimed) return { skipped: true };
+    if (!claimed) {
+      // Attempts may be exhausted (claim marks the job failed): make sure its collection doesn't stay running.
+      await this.pipeline.failOrphanedCollections();
+      return { skipped: true };
+    }
     if (claimed.type !== JOB_TYPE_RESEARCH_COLLECT) throw new Error(`Unsupported job type: ${claimed.type}`);
 
     const collectionId = String(claimed.input.collectionId);
@@ -80,20 +84,35 @@ export class ResearchProcessor extends WorkerHost {
   }
 }
 
-/** Registers the repeatable weekly research and daily purge schedules (idempotent upserts). */
+/**
+ * Registers the repeatable weekly research and daily purge schedules (idempotent upserts), and periodically
+ * fails collections whose jobs failed outside the processor (lease sweeper, exhausted attempts).
+ */
 @Injectable()
-export class ResearchScheduler implements OnApplicationBootstrap {
+export class ResearchScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(ResearchScheduler.name);
   private readonly cron: string;
+  private readonly intervalMs: number;
+  private timer?: NodeJS.Timeout;
 
   constructor(
     @InjectQueue(QUEUE_RESEARCH) private readonly queue: Queue,
+    private readonly pipeline: ResearchPipeline,
     config: ConfigService<AppEnv, true>,
   ) {
     this.cron = config.get('RESEARCH_CRON', { infer: true });
+    this.intervalMs = config.get('JOB_RECONCILE_INTERVAL_MS', { infer: true });
+  }
+
+  onApplicationShutdown(): void {
+    if (this.timer) clearInterval(this.timer);
   }
 
   async onApplicationBootstrap(): Promise<void> {
+    this.timer = setInterval(() => {
+      this.pipeline.failOrphanedCollections().catch((err: unknown) => this.logger.error({ err }, 'Collection reconcile failed'));
+    }, this.intervalMs);
+    this.timer.unref();
     await this.queue.upsertJobScheduler('research-weekly', { pattern: this.cron, tz: 'UTC' }, { name: JOB_NAME_RESEARCH_SCHEDULE, data: {} });
     await this.queue.upsertJobScheduler('research-purge-daily', { pattern: '0 3 * * *', tz: 'UTC' }, { name: JOB_NAME_RESEARCH_PURGE, data: {} });
     this.logger.log(`Research schedule registered: "${this.cron}" (UTC); purge daily 03:00 UTC`);

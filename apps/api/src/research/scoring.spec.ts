@@ -8,6 +8,7 @@ import {
   scoreClusters,
   SignalInput,
   tokenize,
+  scoreFromBreakdown,
   SPARSE_FLOOR,
   WEIGHTS,
 } from './scoring';
@@ -157,6 +158,16 @@ describe('scoreClusters', () => {
     const s = scored.find((x) => x.signals.includes(sparse))!;
     expect(s.confidence).toBeLessThan(r.confidence);
     expect(r.score).toBeGreaterThan(s.score);
+  });
+
+  it('recomputes score and confidence when a component is redacted (YouTube retention)', () => {
+    const clusters = clusterSignals([hot]);
+    const [t] = scoreClusters(clusters, { now: NOW, rules, youtubeCompetition: new Map([[clusters[0].slug, 3]]) });
+    expect(t.missingComponents).not.toContain('competition');
+    const redacted = t.breakdown.map((b) => (b.component === 'competition' ? { ...b, value: null } : b));
+    const r = scoreFromBreakdown(redacted);
+    expect(r.missingComponents).toContain('competition');
+    expect(r.confidence).toBeCloseTo(t.confidence - WEIGHTS.competition, 3);
   });
 
   it('produces scores within 0..1 for empty-metric edge cases', () => {

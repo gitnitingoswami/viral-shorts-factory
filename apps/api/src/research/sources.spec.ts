@@ -22,7 +22,10 @@ function fakeHttp(routes: Record<string, string | Error>): HttpGet & { calls: Ar
 describe('SSRF guard', () => {
   const base = { allowedHosts: new Set(['feeds.example.org']), timeoutMs: 1000 };
 
-  it.each(['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1'])(
+  it.each([
+    '127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0',
+    '::1', 'fd00::1', 'fe80::1', 'fe9f::1', 'febf::1', 'fec0::1', '::ffff:127.0.0.1', '::10.0.0.1', '64:ff9b::a00:1', '2002:a00:1::1',
+  ])(
     'treats %s as private',
     (ip) => expect(isPrivateAddress(ip)).toBe(true),
   );
@@ -134,10 +137,12 @@ describe('adapters', () => {
     await expect(allBroken.fetch(ctx)).rejects.toThrow(/broken.example: HTTP 500/);
   });
 
-  it('YouTube: counts results with part=id only, and is unconfigured without a key', async () => {
-    const http = fakeHttp({ 'www.googleapis.com': JSON.stringify({ items: [{}, {}, {}] }) });
+  it('YouTube: uses the totalResults estimate (not the capped page size), part=id only, unconfigured without a key', async () => {
+    const http = fakeHttp({ 'www.googleapis.com': JSON.stringify({ items: Array.from({ length: 50 }, () => ({})), pageInfo: { totalResults: 1240 } }) });
     const yt = new YouTubeCompetitionClient(deps(http), 'AIzaTestKey_abcdefghijklmnop');
-    await expect(yt.countShorts('typescript generics', ctx.windowStart)).resolves.toBe(3);
+    await expect(yt.countShorts('typescript generics', ctx.windowStart)).resolves.toBe(1240);
+    const noEstimate = new YouTubeCompetitionClient(deps(fakeHttp({ 'www.googleapis.com': JSON.stringify({ items: [{}, {}, {}] }) })), 'AIzaTestKey_abcdefghijklmnop');
+    await expect(noEstimate.countShorts('x', ctx.windowStart)).resolves.toBe(3);
     expect(http.calls[0].url).toContain('part=id');
     expect(http.calls[0].url).toContain('videoDuration=short');
     expect(new YouTubeCompetitionClient(deps(http)).isConfigured()).toBe(false);
@@ -176,6 +181,7 @@ describe('report', () => {
     expect(markdown).not.toContain('<img');
     expect(markdown).not.toContain('<b>');
     expect(markdown).not.toContain('javascript:');
+    expect(markdown).not.toMatch(/short videos|YouTube search estimate/); // no YouTube numbers in long-lived reports
     expect(limitations.join(' ')).toMatch(/stackexchange.*failed/);
     expect(limitations.join(' ')).toMatch(/competition was not measured/);
     expect(limitations.join(' ')).toMatch(/not predictions of views/);

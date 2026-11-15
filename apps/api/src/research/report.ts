@@ -50,11 +50,17 @@ export function buildReport(r: ReportInput, topN = 10): { markdown: string; limi
     lines.push(`Score ${t.score.toFixed(2)} · confidence ${pct(t.confidence)}${t.stale ? ' · STALE' : ''} · sources: ${t.sources.join(', ')}`);
     if (t.missingComponents.length) lines.push(`Missing data: ${t.missingComponents.join(', ')}`);
     for (const b of t.breakdown) {
+      // YouTube-derived values must not outlive the 30-day retention window, and reports are kept longer,
+      // so the report only says whether competition was measured (details live on the topic until redacted).
+      if (b.component === 'competition') {
+        lines.push(`- competition (${pct(b.weight)}): ${b.value === null ? 'missing' : 'measured on YouTube (details on the topic for 30 days)'}`);
+        continue;
+      }
       lines.push(`- ${b.component} (${pct(b.weight)}): ${b.value === null ? 'missing' : b.value.toFixed(2)}. ${mdText(b.explanation)}`);
     }
     lines.push('Evidence:');
     for (const s of t.signals.slice(0, 5)) {
-      const url = /^https?:\/\//.test(s.url) ? s.url : '';
+      const url = /^https?:\/\//.test(s.url) ? s.url.replace(/[()[\]<>\s]/g, (ch) => encodeURIComponent(ch)) : '';
       lines.push(`- [${s.source}] ${mdText(s.title)}${url ? ` (${url})` : ''}`);
     }
   });

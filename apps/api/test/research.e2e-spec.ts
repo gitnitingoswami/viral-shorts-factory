@@ -79,6 +79,11 @@ describe('Trend research (e2e)', () => {
       await request(http).post('/api/niches').set(auth(owner)).send({ name: 'Coding Tips', keywords: ['git'] }).expect(409);
       const upd = await request(http).patch(`/api/niches/${nicheId}`).set(auth(owner)).send({ description: 'Short tips' }).expect(200);
       expect(upd.body.description).toBe('Short tips');
+      // Renaming onto another niche's name is a 409, not a 500.
+      const other = await request(http).post('/api/niches').set(auth(owner)).send({ name: 'DevOps', keywords: ['docker'], active: false }).expect(201);
+      await request(http).patch(`/api/niches/${other.body.id}`).set(auth(owner)).send({ name: 'Coding tips' }).expect(409);
+      const audit = await ds.query<Array<{ action: string }>>(`SELECT action FROM audit_event WHERE action IN ('niche.created', 'niche.updated')`);
+      expect(audit.map((a) => a.action)).toEqual(expect.arrayContaining(['niche.created', 'niche.updated']));
     });
   });
 
@@ -173,6 +178,11 @@ describe('Trend research (e2e)', () => {
       const [t1, t2] = list.body.items;
       const d = await request(http).post(`/api/research/topics/${t1.id}/decision`).set(auth(reviewer)).send({ decision: 'approved', note: 'good hook' }).expect(200);
       expect(d.body).toMatchObject({ status: 'approved', decisionNote: 'good hook' });
+      const [ev] = await ds.query<Array<{ details: { previous: string; decision: string; note: string } }>>(
+        `SELECT details FROM audit_event WHERE action = 'topic.decision' AND subject_id = $1`,
+        [t1.id],
+      );
+      expect(ev.details).toEqual({ previous: 'new', decision: 'approved', note: 'good hook' });
       await request(http).post(`/api/research/topics/${t2.id}/decision`).set(auth(owner)).send({ decision: 'maybe' }).expect(400);
       const approved = await request(http).get(`/api/research/collections/${collection.id}/topics?status=approved`).set(auth(owner)).expect(200);
       expect(approved.body.items.map((t: { id: string }) => t.id)).toEqual([t1.id]);
@@ -257,12 +267,50 @@ describe('Trend research (e2e)', () => {
       }
     });
 
-    it('purges YouTube-derived data past its retention window', async () => {
+    it('purges and redacts every YouTube-derived value past its retention window', async () => {
+      const [{ withYt }] = await ds.query<Array<{ withYt: number }>>(
+        `SELECT count(*)::int AS "withYt" FROM trend_topic WHERE youtube_expires_at IS NOT NULL`,
+      );
+      expect(withYt).toBeGreaterThan(0);
       await ds.query(`UPDATE trend_metric SET expires_at = now() - interval '1 day' WHERE source_key = 'youtube'`);
+      await ds.query(`UPDATE trend_topic SET youtube_expires_at = now() - interval '1 day' WHERE youtube_expires_at IS NOT NULL`);
       const purged = await app.get(ResearchPipeline).purgeExpired();
       expect(purged).toBeGreaterThan(0);
-      const [{ n }] = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM trend_metric WHERE expires_at < now()`);
+      const [{ n }] = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM trend_metric WHERE source_key = 'youtube'`);
       expect(n).toBe(0);
+      // No YouTube number may remain anywhere: topic breakdowns, explanations, or reports.
+      const leftovers = await ds.query<Array<{ id: string }>>(
+        `SELECT id FROM trend_topic WHERE breakdown::text ~ 'short videos' OR youtube_expires_at IS NOT NULL
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(breakdown) b WHERE b->>'component' = 'competition' AND b->'value' <> 'null'::jsonb)`,
+      );
+      expect(leftovers).toEqual([]);
+      const reports = await ds.query<Array<{ n: number }>>(`SELECT count(*)::int AS n FROM weekly_trend_report WHERE markdown ~ 'short videos|search estimate'`);
+      expect(reports[0].n).toBe(0);
+      const redacted = await ds.query<Array<{ missing: string[] }>>(`SELECT missing_components AS missing FROM trend_topic WHERE breakdown::text ~ '30-day retention' LIMIT 1`);
+      expect(redacted[0].missing).toContain('competition');
+    });
+
+    it('stops YouTube calls at the daily cap', async () => {
+      await ds.query(
+        `INSERT INTO expense_record (workspace_id, provider, category, units, unit, amount_minor) VALUES ('00000000-0000-4000-8000-000000000001', 'youtube', 'api', 80, 'search.list call', 0)`,
+      );
+      const c = await withWorker({}, () => runAndWait('run-key-cap'));
+      expect(c.sourceResults.find((r) => r.source === 'youtube')).toMatchObject({ status: 'skipped', message: 'daily YouTube search cap reached' });
+    });
+
+    it('fails collections whose job failed outside the processor (never stuck in running)', async () => {
+      const [job] = await ds.query<Array<{ id: string }>>(
+        `INSERT INTO job (workspace_id, type, queue, idempotency_key, status, attempt, max_attempts, error)
+         VALUES ('00000000-0000-4000-8000-000000000001', 'research.collect', 'research', 'orphan-job', 'failed', 3, 3, 'Lease expired on final attempt') RETURNING id`,
+      );
+      const [col] = await ds.query<Array<{ id: string }>>(
+        `INSERT INTO trend_collection (workspace_id, niche_id, trigger, status, run_key, window_start, window_end, job_id)
+         VALUES ('00000000-0000-4000-8000-000000000001', $1, 'manual', 'running', 'orphan-run', now() - interval '7 days', now(), $2) RETURNING id`,
+        [nicheId, job.id],
+      );
+      expect(await app.get(ResearchPipeline).failOrphanedCollections()).toBeGreaterThanOrEqual(1);
+      const [row] = await ds.query<Array<{ status: string }>>(`SELECT status FROM trend_collection WHERE id = $1`, [col.id]);
+      expect(row.status).toBe('failed');
     });
 
     it('job lease: a live lease blocks other workers; an expired lease can be reclaimed', async () => {

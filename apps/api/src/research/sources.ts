@@ -335,8 +335,10 @@ export class YouTubeCompetitionClient {
   }
 
   /**
-   * Counts short videos published in the window that match the query (search.list, part=id: no titles or
-   * channel data are retrieved or stored). Costs one call from the search.list quota bucket.
+   * Estimates how many short videos (<4 min; YouTube's `videoDuration=short`, not specifically Shorts) were
+   * published in the window for the query, using YouTube's `pageInfo.totalResults` estimate (a single page of
+   * items is capped at 50 and would under-report). part=id: no titles or channel data are retrieved.
+   * Costs one call from the search.list quota bucket.
    */
   async countShorts(query: string, windowStart: Date): Promise<number> {
     if (!this.apiKey) throw new Error('YouTube API key not configured');
@@ -350,6 +352,8 @@ export class YouTubeCompetitionClient {
       key: this.apiKey,
     });
     const body = await this.deps.http(`https://www.googleapis.com/youtube/v3/search?${params}`, opts(this.deps, ['www.googleapis.com']));
-    return asArray((JSON.parse(body) as { items?: unknown[] }).items).length;
+    const data = JSON.parse(body) as { items?: unknown[]; pageInfo?: { totalResults?: number } };
+    const estimate = data.pageInfo?.totalResults;
+    return typeof estimate === 'number' && Number.isFinite(estimate) && estimate >= 0 ? estimate : asArray(data.items).length;
   }
 }

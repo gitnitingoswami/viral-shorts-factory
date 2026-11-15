@@ -24,10 +24,25 @@ import {
   TrendTopicEntity,
   WeeklyTrendReportEntity,
 } from '../database/research.entities';
+import { AuditService } from '../audit/audit.service';
 import { JobsService } from '../jobs/jobs.service';
 import { RESEARCH_ADAPTERS, ResearchAdapters } from './adapters.provider';
 
 export const RESEARCH_WINDOW_DAYS = 7;
+
+export interface Actor {
+  userId: string;
+  correlationId?: string | null;
+}
+
+function auditActor(actor: Actor | undefined, workspaceId: string) {
+  return {
+    actorType: actor ? ('user' as const) : ('system' as const),
+    actorId: actor?.userId ?? null,
+    workspaceId,
+    correlationId: actor?.correlationId ?? null,
+  };
+}
 
 export function nicheSlug(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'niche';
@@ -109,6 +124,7 @@ export class ResearchService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly jobs: JobsService,
+    private readonly audit: AuditService,
     @InjectRepository(NicheEntity) private readonly niches: Repository<NicheEntity>,
     @InjectRepository(TrendCollectionEntity) private readonly collections: Repository<TrendCollectionEntity>,
     @InjectRepository(TrendTopicEntity) private readonly topics: Repository<TrendTopicEntity>,
@@ -137,7 +153,7 @@ export class ResearchService {
     return (await this.niches.find({ where: { workspaceId }, order: { createdAt: 'ASC' } })).map(toNicheDto);
   }
 
-  async createNiche(workspaceId: string, body: UpsertNicheRequest): Promise<NicheDto> {
+  async createNiche(workspaceId: string, body: UpsertNicheRequest, actor?: Actor): Promise<NicheDto> {
     const keywords = normalizeKeywords(body.keywords);
     if (!keywords.length) throw new BadRequestException('At least one keyword is required');
     const slug = nicheSlug(body.name);
@@ -153,15 +169,21 @@ export class ResearchService {
         active: body.active ?? true,
       }),
     );
+    await this.audit.record({ ...auditActor(actor, workspaceId), action: 'niche.created', subjectType: 'niche', subjectId: saved.id, outcome: 'success', details: { keywords: saved.keywords.length } });
     return toNicheDto(saved);
   }
 
-  async updateNiche(workspaceId: string, id: string, body: Partial<UpsertNicheRequest>): Promise<NicheDto> {
+  async updateNiche(workspaceId: string, id: string, body: Partial<UpsertNicheRequest>, actor?: Actor): Promise<NicheDto> {
     const niche = await this.niches.findOne({ where: { id, workspaceId } });
     if (!niche) throw new NotFoundException('Niche not found');
+    const before = { name: niche.name, active: niche.active, keywords: niche.keywords.length, excludeKeywords: niche.excludeKeywords.length };
     if (body.name !== undefined) {
+      const slug = nicheSlug(body.name);
+      if (slug !== niche.slug && (await this.niches.exists({ where: { workspaceId, slug } }))) {
+        throw new ConflictException('A niche with this name already exists');
+      }
       niche.name = body.name.trim();
-      niche.slug = nicheSlug(body.name);
+      niche.slug = slug;
     }
     if (body.description !== undefined) niche.description = body.description.trim();
     if (body.keywords !== undefined) {
@@ -171,7 +193,16 @@ export class ResearchService {
     }
     if (body.excludeKeywords !== undefined) niche.excludeKeywords = normalizeKeywords(body.excludeKeywords);
     if (body.active !== undefined) niche.active = body.active;
-    return toNicheDto(await this.niches.save(niche));
+    const saved = await this.niches.save(niche);
+    await this.audit.record({
+      ...auditActor(actor, workspaceId),
+      action: 'niche.updated',
+      subjectType: 'niche',
+      subjectId: id,
+      outcome: 'success',
+      details: { before, after: { name: saved.name, active: saved.active, keywords: saved.keywords.length, excludeKeywords: saved.excludeKeywords.length } },
+    });
+    return toNicheDto(saved);
   }
 
   // ------------------------------------------------------------ runs
@@ -219,6 +250,17 @@ export class ResearchService {
       createdBy: input.createdBy ?? null,
       correlationId: input.correlationId ?? null,
       workspaceId: input.workspaceId,
+    });
+    await this.audit.record({
+      actorType: input.createdBy ? 'user' : 'system',
+      actorId: input.createdBy ?? null,
+      workspaceId: input.workspaceId,
+      action: 'research.run_requested',
+      subjectType: 'trend_collection',
+      subjectId: collection.id,
+      outcome: 'success',
+      correlationId: input.correlationId ?? null,
+      details: { trigger: input.trigger, nicheId: niche.id, jobId: job.id },
     });
     if (collection.jobId !== job.id) {
       await this.collections.update({ id: collection.id }, { jobId: job.id });
@@ -288,14 +330,27 @@ export class ResearchService {
     return unique.map((id) => details.find((d) => d.id === id)!);
   }
 
-  async decide(workspaceId: string, id: string, userId: string, body: TopicDecisionRequest): Promise<TrendTopicDto> {
+  async decide(workspaceId: string, id: string, userId: string, body: TopicDecisionRequest, correlationId?: string | null): Promise<TrendTopicDto> {
     const topic = await this.topics.findOne({ where: { id, workspaceId } });
     if (!topic) throw new NotFoundException('Topic not found');
+    const previous = topic.status;
     topic.status = body.decision;
     topic.decidedBy = userId;
     topic.decidedAt = new Date();
     topic.decisionNote = body.note?.trim() || null;
-    return toTopicDto(await this.topics.save(topic));
+    const saved = await this.topics.save(topic);
+    await this.audit.record({
+      actorType: 'user',
+      actorId: userId,
+      workspaceId,
+      action: 'topic.decision',
+      subjectType: 'trend_topic',
+      subjectId: id,
+      outcome: 'success',
+      correlationId: correlationId ?? null,
+      details: { previous, decision: body.decision, note: topic.decisionNote?.slice(0, 500) ?? null },
+    });
+    return toTopicDto(saved);
   }
 
   private async topicDetails(workspaceId: string, ids: string[]): Promise<TrendTopicDetailDto[]> {

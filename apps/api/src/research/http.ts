@@ -44,7 +44,16 @@ export function isPrivateAddress(ip: string): boolean {
   }
   const v6 = ip.toLowerCase();
   if (v6.startsWith('::ffff:')) return isPrivateAddress(v6.slice(7));
-  return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('ff');
+  // IPv4-compatible (::a.b.c.d), NAT64 (64:ff9b::/96) and 6to4 (2002::/16) can embed internal IPv4 targets.
+  if (/^::\d+\.\d+\.\d+\.\d+$/.test(v6) || v6.startsWith('64:ff9b:') || v6.startsWith('2002:')) return true;
+  return (
+    v6 === '::' ||
+    v6 === '::1' ||
+    /^f[cd]/.test(v6) || // unique local fc00::/7
+    /^fe[89ab]/.test(v6) || // link-local fe80::/10
+    /^fe[c-f]/.test(v6) || // site-local fec0::/10 (deprecated)
+    v6.startsWith('ff') // multicast
+  );
 }
 
 async function defaultResolve(host: string): Promise<string[]> {

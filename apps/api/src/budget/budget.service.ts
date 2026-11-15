@@ -82,6 +82,16 @@ export class BudgetService implements OnApplicationBootstrap {
     }
   }
 
+  /** Units used by a provider/unit since `since` (e.g. YouTube search.list calls today). */
+  async unitsSince(workspaceId: string, provider: string, unit: string, since: Date): Promise<number> {
+    const rows = await this.dataSource.query<Array<{ total: string | null }>>(
+      `SELECT COALESCE(SUM(units), 0)::text AS total FROM expense_record
+       WHERE workspace_id = $1 AND provider = $2 AND unit = $3 AND occurred_at >= $4`,
+      [workspaceId, provider, unit, since],
+    );
+    return Number(rows[0]?.total ?? 0);
+  }
+
   async record(e: ExpenseInput): Promise<void> {
     await this.expenses.insert({ ...e, workspaceId: e.workspaceId ?? DEFAULT_WORKSPACE_ID, currency: 'USD' });
   }

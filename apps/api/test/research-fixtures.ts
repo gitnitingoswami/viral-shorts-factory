@@ -59,7 +59,7 @@ export function fixtureHttp(o: FixtureOptions = {}): HttpGet & { calls: string[]
         if (o.youtubeError) return Promise.reject(new Error(o.youtubeError));
         const q = u.searchParams.get('q') ?? '';
         const n = Object.entries(o.youtubeCounts ?? {}).find(([k]) => q.includes(k))?.[1] ?? 5;
-        return Promise.resolve(JSON.stringify({ items: Array.from({ length: n }, () => ({})) }));
+        return Promise.resolve(JSON.stringify({ items: Array.from({ length: Math.min(n, 50) }, () => ({})), pageInfo: { totalResults: n } }));
       }
       default:
         return Promise.reject(new Error(`unexpected host ${u.hostname}`));

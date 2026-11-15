@@ -32,6 +32,8 @@ export const envSchema = z
     YOUTUBE_API_KEY: z.union([z.literal(''), z.string().min(20)]).optional(),
     GITHUB_RESEARCH_TOKEN: z.union([z.literal(''), z.string().min(20)]).optional(),
     RESEARCH_CRON: z.string().default('0 6 * * 1'),
+    /** Max YouTube search.list calls per UTC day across all runs (default quota allows ~100). */
+    YOUTUBE_DAILY_SEARCH_CAP: z.coerce.number().int().min(0).max(10_000).default(80),
     RESEARCH_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
     RESEARCH_RSS_FEEDS: z
       .string()

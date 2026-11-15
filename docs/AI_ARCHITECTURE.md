@@ -70,7 +70,7 @@ Normalization: min-max within a weekly collection with winsorization at p5/p95. 
 - **Clustering:** deterministic greedy single pass in TypeScript, joining when token Jaccard ≥ 0.5 or the normalized URL is the same. This replaces the `pg_trgm` idea: same effect, unit-testable, no extension needed.
 - **Per-source normalization:** growth and demand are normalized within each source (HN points/day, GitHub stars/day, SO votes/day; HN comments, SO views), so different scales never compete directly.
 - **Evidence shrinkage:** `score = weighted × (0.5 + 0.5 × confidence)`. Renormalizing over available components alone let data-poor topics (e.g. a release note with only freshness + relevance) outrank well-evidenced ones (found in the first live run, 2026-11-15).
-- **YouTube competition:** checked only for the 15 strongest candidates per run (one `search.list`, `part=id`), so quota use is bounded and no titles or channel data are retrieved. Counts expire after 30 days.
+- **YouTube competition:** checked only for the 15 strongest candidates per run (one `search.list`, `part=id`, capped at `YOUTUBE_DAILY_SEARCH_CAP` calls per UTC day), so quota use is bounded and no titles or channel data are retrieved. The value is YouTube's `totalResults` *estimate* of short videos (<4 min, `videoDuration=short`; not specifically Shorts), labelled as such. After 30 days the metric rows are deleted and the topic's competition value and explanation are redacted (score recomputed); weekly reports never contain YouTube numbers.
 - **Source hygiene (GitHub):** `fork:false`, plus de-duplication of repos sharing a description, removes star-farmed clone clusters.
 
 ## 6. Prompt management
