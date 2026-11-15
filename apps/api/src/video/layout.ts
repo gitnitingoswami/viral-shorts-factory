@@ -19,7 +19,7 @@ export interface Box {
  * YouTube Shorts overlays the channel name, title and buttons on the bottom ~25% and the right edge, so captions
  * and key text stay inside this safe area (design units).
  */
-export const SAFE_AREA: Box = { x: 60, y: 120, width: 900, height: 1380 };
+export const SAFE_AREA: Box = { x: 80, y: 120, width: 860, height: 1380 };
 
 export const CAPTION = {
   /** Caption box (design units): inside the safe area, above the Shorts UI. */

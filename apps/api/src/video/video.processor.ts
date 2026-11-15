@@ -47,7 +47,8 @@ export class VideoProcessor extends WorkerHost implements OnApplicationBootstrap
     this.leaseMs = config.get('JOB_LEASE_MS', { infer: true });
     this.concurrency = config.get('RENDER_CONCURRENCY', { infer: true });
     this.reconcileMs = config.get('JOB_RECONCILE_INTERVAL_MS', { infer: true });
-    // Whole-render deadline (individual FFmpeg/TTS steps have their own timeout): bounds hung storage/DB calls too.
+    // Whole-render deadline on top of per-step process timeouts. It kills running children and stops the lease
+    // heartbeat (so another worker can take over), but cannot interrupt an in-flight storage/DB await.
     this.deadlineMs = config.get('RENDER_TIMEOUT_MS', { infer: true }) * 3;
   }
 

@@ -4,7 +4,7 @@ import type { ProbeResult } from './ffmpeg';
 import { parseRate } from './ffmpeg';
 import { buildFrameSvg, renderPng, tokenizeLine } from './frames';
 import { CAPTION, captionMaxChars, captionRect, fitText, insideBox, SAFE_AREA, wrapWords } from './layout';
-import { redactMediaQuery } from '../common/logging';
+import { redactMediaQuery, serializeRequest } from '../common/logging';
 import { MediaSigner } from './media-signer';
 import { ProcessError, run } from './process';
 import { evaluateQuality, QualityInput, summarize } from './quality';
@@ -272,5 +272,11 @@ describe('log redaction', () => {
     expect(redactMediaQuery('/api/video/media/abc?exp=1&sig=secret')).toBe('/api/video/media/abc?[REDACTED]');
     expect(redactMediaQuery('/api/video/productions?limit=5')).toBe('/api/video/productions?limit=5');
     expect(redactMediaQuery(undefined)).toBeUndefined();
+  });
+
+  it('drops the parsed query (exp/sig) of signed media requests from request logs', () => {
+    const out = serializeRequest({ method: 'GET', url: '/api/video/media/abc?exp=1&sig=SECRET', query: { exp: '1', sig: 'SECRET' } });
+    expect(JSON.stringify(out)).not.toContain('SECRET');
+    expect(serializeRequest({ url: '/api/video/productions?limit=5', query: { limit: '5' } })).toMatchObject({ query: { limit: '5' } });
   });
 });
