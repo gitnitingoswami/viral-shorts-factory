@@ -1,0 +1,159 @@
+<div class="page-header">
+  <h1 class="page-title">Trend topics</h1>
+  <div class="actions">
+    <a mat-stroked-button routerLink="/research">All collections</a>
+    <a mat-stroked-button [routerLink]="['/research/collections', id(), 'report']">Weekly report</a>
+  </div>
+</div>
+
+@if (collection(); as c) {
+  <p class="muted" data-testid="collection-summary">
+    <span class="chip chip-{{ c.status }}">{{ c.status }}</span>
+    Window {{ c.windowStart | date: 'mediumDate' }} – {{ c.windowEnd | date: 'mediumDate' }} ·
+    {{ c.topicCount }} topics
+  </p>
+}
+
+<form class="filters" [formGroup]="filters" (ngSubmit)="applyFilters()" aria-label="Topic filters">
+  <mat-form-field appearance="outline">
+    <mat-label>Search</mat-label>
+    <input matInput type="search" formControlName="q" data-testid="filter-q" />
+  </mat-form-field>
+  <mat-form-field appearance="outline">
+    <mat-label>Status</mat-label>
+    <select matNativeControl formControlName="status" data-testid="filter-status">
+      <option value="">All</option>
+      <option value="new">New</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </mat-form-field>
+  <mat-form-field appearance="outline">
+    <mat-label>Sort by</mat-label>
+    <select matNativeControl formControlName="sort" data-testid="filter-sort">
+      <option value="score">Score</option>
+      <option value="freshness">Freshness</option>
+      <option value="confidence">Confidence</option>
+    </select>
+  </mat-form-field>
+  <label class="slider">
+    <span>Minimum score: {{ filters.controls.minScore.value | number: '1.2-2' }}</span>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.05"
+      formControlName="minScore"
+      data-testid="filter-min-score"
+    />
+  </label>
+  <button mat-stroked-button type="submit">Apply</button>
+</form>
+
+<div class="selection-bar" role="region" aria-label="Compare selection">
+  <span aria-live="polite" data-testid="selection-count">
+    {{ selected().length }} selected (choose 2–{{ maxCompare }} to compare)
+  </span>
+  <button mat-flat-button type="button" data-testid="compare" [disabled]="!canCompare()" (click)="compare()">
+    Compare
+  </button>
+</div>
+
+<p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+
+<section aria-live="polite" aria-label="Topic list">
+  @if (loading() && !page()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading topics" />
+      <span>Loading topics…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="loadTopics()">Retry</button>
+    </div>
+  } @else if (page(); as p) {
+    @if (p.items.length === 0) {
+      <p class="state" data-testid="topics-empty">No topics match these filters.</p>
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table" data-testid="topics-table">
+          <thead>
+            <tr>
+              <th scope="col"><span class="visually-hidden">Select</span></th>
+              <th scope="col">Title</th>
+              <th scope="col">Score</th>
+              <th scope="col">Confidence</th>
+              <th scope="col">Sources</th>
+              <th scope="col">Status</th>
+              @if (canDecide()) {
+                <th scope="col">Decision</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of p.items; track t.id) {
+              <tr [attr.data-topic]="t.id" [class.selected]="isSelected(t.id)">
+                <td>
+                  <input
+                    type="checkbox"
+                    data-testid="select-topic"
+                    [id]="'select-' + t.id"
+                    [checked]="isSelected(t.id)"
+                    [disabled]="!isSelected(t.id) && selectionFull()"
+                    (change)="onToggle(t.id, $event)"
+                  />
+                  <label class="visually-hidden" [for]="'select-' + t.id">Select {{ t.title }} for comparison</label>
+                </td>
+                <td class="title-cell">
+                  <a [routerLink]="['/research/topics', t.id]">{{ t.title }}</a>
+                  @if (t.stale) {
+                    <span class="chip chip-stale" data-testid="stale">Stale</span>
+                  }
+                </td>
+                <td>
+                  <div class="score">
+                    <mat-progress-bar
+                      mode="determinate"
+                      [value]="t.score * 100"
+                      [attr.aria-label]="'Score of ' + t.title"
+                    />
+                    <span>{{ t.score | number: '1.2-2' }}</span>
+                  </div>
+                </td>
+                <td>{{ pct(t.confidence) }}</td>
+                <td>{{ t.sources.map(sourceLabel).join(', ') || '—' }}</td>
+                <td><span class="chip chip-{{ t.status }}" data-testid="topic-status">{{ t.status }}</span></td>
+                @if (canDecide()) {
+                  <td>
+                    <app-decision-controls
+                      [topic]="t"
+                      [busy]="deciding().has(t.id)"
+                      (decide)="decide(t, $event)"
+                    />
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="muted">
+          {{ p.offset + 1 }}–{{ p.offset + p.items.length }} of {{ p.total }} topics
+        </span>
+        <button mat-stroked-button type="button" [disabled]="p.offset === 0" (click)="goTo(p.offset - pageSize)">
+          Previous
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="p.offset + p.items.length >= p.total"
+          (click)="goTo(p.offset + pageSize)"
+        >
+          Next
+        </button>
+      </div>
+    }
+  }
+</section>

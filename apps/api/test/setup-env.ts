@@ -26,6 +26,11 @@ env.COOKIE_SECURE = 'false';
 env.THROTTLE_ENABLED = 'false';
 env.TRUST_PROXY = '1';
 env.JOB_RECONCILE_INTERVAL_MS = '500';
+// Fake credentials so the YouTube/GitHub code paths run against fixture HTTP (never the network).
+env.YOUTUBE_API_KEY = 'AIzaFAKE-test-key-0123456789';
+env.GITHUB_RESEARCH_TOKEN = '';
+env.RESEARCH_RSS_FEEDS = 'https://nodejs.org/en/feed/blog.xml';
+env.RESEARCH_CRON = '0 6 * * 1';
 env.SWAGGER_ENABLED = 'false';
 env.BOOTSTRAP_OWNER_EMAIL = '';
 env.BOOTSTRAP_OWNER_PASSWORD = '';

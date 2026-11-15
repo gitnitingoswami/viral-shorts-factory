@@ -36,6 +36,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/jobs/jobs').then((m) => m.Jobs),
       },
       {
+        path: 'research',
+        loadChildren: () => import('./features/research/research.routes').then((m) => m.RESEARCH_ROUTES),
+      },
+      {
         path: 'audit',
         title: 'Audit log · Viral Shorts Factory',
         canActivate: [roleGuard],

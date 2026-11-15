@@ -25,6 +25,24 @@ export const envSchema = z
       .string()
       .default('false')
       .refine((v) => v !== 'true', "TRUST_PROXY must be a hop count or proxy CIDR list, never 'true'"),
+    /** Job lease: a running job whose lease expires (worker died or stalled) may be reclaimed. */
+    JOB_LEASE_MS: z.coerce.number().int().min(1000).default(5 * 60_000),
+
+    // ---- Phase 02: research sources (all optional; missing credentials → source skipped) ----
+    YOUTUBE_API_KEY: z.union([z.literal(''), z.string().min(20)]).optional(),
+    GITHUB_RESEARCH_TOKEN: z.union([z.literal(''), z.string().min(20)]).optional(),
+    RESEARCH_CRON: z.string().default('0 6 * * 1'),
+    /** Max YouTube search.list calls per UTC day across all runs (default quota allows ~100). */
+    YOUTUBE_DAILY_SEARCH_CAP: z.coerce.number().int().min(0).max(10_000).default(80),
+    RESEARCH_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
+    RESEARCH_RSS_FEEDS: z
+      .string()
+      .default(
+        'https://nodejs.org/en/feed/blog.xml,https://devblogs.microsoft.com/typescript/feed/,https://blog.angular.dev/feed,https://github.blog/changelog/feed/',
+      ),
+    /** Variable AI/API spend guard (USD per calendar month). */
+    MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(100),
+
     /** How often the worker re-dispatches stale queued jobs and recovers stuck running jobs. */
     JOB_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(200).default(60_000),
 

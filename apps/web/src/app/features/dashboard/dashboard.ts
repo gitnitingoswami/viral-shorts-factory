@@ -3,10 +3,11 @@ import { MatCardModule } from '@angular/material/card';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { HealthStatus } from '../health/health-status';
+import { BudgetCard } from './budget-card';
 
 @Component({
   selector: 'app-dashboard',
-  imports: [MatCardModule, RouterLink, HealthStatus],
+  imports: [MatCardModule, RouterLink, HealthStatus, BudgetCard],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="page-title">Dashboard</h1>
@@ -26,6 +27,13 @@ import { HealthStatus } from '../health/health-status';
           <a routerLink="/health">View health details</a>
         </mat-card-content>
       </mat-card>
+      @if (isOwner()) {
+        <mat-card appearance="outlined">
+          <mat-card-content>
+            <app-budget-card />
+          </mat-card-content>
+        </mat-card>
+      }
     </div>
   `,
   styles: `
@@ -48,5 +56,7 @@ import { HealthStatus } from '../health/health-status';
   `,
 })
 export class Dashboard {
-  protected readonly user = inject(AuthService).currentUser;
+  private readonly auth = inject(AuthService);
+  protected readonly user = this.auth.currentUser;
+  protected readonly isOwner = this.auth.isOwner;
 }

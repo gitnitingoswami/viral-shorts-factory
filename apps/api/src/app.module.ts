@@ -17,6 +17,8 @@ import { InfraModule } from './infra/infra.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { JobsModule, QueueRootModule } from './jobs/jobs.module';
 import { UsersModule } from './users/users.module';
+import { BudgetModule } from './budget/budget.module';
+import { ResearchModule } from './research/research.module';
 
 /** HTTP API process. */
 @Module({
@@ -39,6 +41,8 @@ import { UsersModule } from './users/users.module';
     ChannelsModule,
     IntegrationsModule,
     JobsModule,
+    BudgetModule,
+    ResearchModule,
   ],
   controllers: [HealthController],
   providers: [

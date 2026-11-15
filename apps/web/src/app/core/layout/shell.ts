@@ -20,6 +20,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { path: '/health', label: 'System health' },
   { path: '/channels', label: 'Channels' },
   { path: '/jobs', label: 'Jobs' },
+  { path: '/research', label: 'Research' },
   { path: '/audit', label: 'Audit log', ownerOnly: true },
 ];
 

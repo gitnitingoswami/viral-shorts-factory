@@ -1,0 +1,44 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+
+  mat-form-field {
+    flex: 1 1 180px;
+  }
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.selection-bar,
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.title-cell {
+  min-width: 200px;
+
+  .chip {
+    margin-left: 8px;
+  }
+}
+
+.score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+tr.selected {
+  background: var(--mat-sys-secondary-container);
+}

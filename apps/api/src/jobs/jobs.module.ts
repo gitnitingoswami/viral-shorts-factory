@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { QUEUE_MAINTENANCE } from '../common/constants';
+import { QUEUE_MAINTENANCE, QUEUE_RESEARCH } from '../common/constants';
 import { AppConfigService } from '../config/config';
 import { JobEntity } from '../database/entities';
 import { JobsController } from './jobs.controller';
@@ -22,9 +22,9 @@ export const QueueRootModule = BullModule.forRootAsync({
 });
 
 @Module({
-  imports: [TypeOrmModule.forFeature([JobEntity]), BullModule.registerQueue({ name: QUEUE_MAINTENANCE })],
+  imports: [TypeOrmModule.forFeature([JobEntity]), BullModule.registerQueue({ name: QUEUE_MAINTENANCE }, { name: QUEUE_RESEARCH })],
   providers: [JobsService],
-  exports: [JobsService, TypeOrmModule],
+  exports: [JobsService, TypeOrmModule, BullModule],
 })
 export class JobsCoreModule {}
 
