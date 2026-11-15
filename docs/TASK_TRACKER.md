@@ -41,18 +41,31 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T01.6 | Independent code + security review | code-reviewer/security-reviewer (subagent) | DONE | Round 1 RETURN FOR FIXES (5 medium); fixes in `a9ba047` |
 | T01.7 | Completion report | Lead Orchestrator | DONE | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
 
+## Phase 02 — Weekly trend research engine
+| ID | Task | Owner | Status | Output |
+|---|---|---|---|---|
+| T02.1 | Migration: niche, research_source, collections, signals, topics, metrics, report, expense_record, budget, job lease | Lead Orchestrator (database-engineer role) | DONE | `1763330000000-TrendResearch.ts` |
+| T02.2 | Source adapters (HN, Stack Exchange, GitHub, RSS) + YouTube competition, SSRF-safe HTTP | Lead Orchestrator (backend-engineer role) | DONE | `apps/api/src/research/{http,sources}.ts` |
+| T02.3 | Deterministic clustering + explainable scoring | Lead Orchestrator | DONE | `scoring.ts` (unit-tested) |
+| T02.4 | Pipeline job, weekly schedule, 30-day YouTube purge, ledger + budget guard | Lead Orchestrator | DONE | `research.pipeline.ts`, `research.processor.ts`, `budget/` |
+| T02.5 | API: niches, runs, collections, topics, compare, decisions, report, budget | Lead Orchestrator | DONE | `research.controller.ts` |
+| T02.6 | Angular research UI + budget card | frontend-engineer (subagent) | DONE | `apps/web/src/app/features/research` |
+| T02.7 | Live smoke run against real public sources | Lead Orchestrator | DONE | 4/4 sources ok; quality fixes (HN tags, GitHub clones/forks, sparse-score shrinkage) |
+| T02.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | IN_PROGRESS | |
+
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
 |---|---|---|---|
-| F-01 | Job lease (worker id + expiry) in the claim, so a stalled-but-alive worker can't double-process; required before upload jobs | Review #6 | 02 (before any side-effecting job) |
+| F-01 | Job lease (worker id + expiry) in the claim, so a stalled-but-alive worker can't double-process; required before upload jobs | Review #6 | **DONE in Phase 02** (claim/heartbeat/complete/fail with lease; e2e-tested) |
 | F-02 | Separate non-owner DB role for the app (revoke UPDATE/DELETE/TRUNCATE on audit_event, no trigger disable) | Review #9 | 09 |
 | F-03 | Request hash in audit events (T18) | Review suggestion | 05 (publishing) |
-| F-04 | Test for wrong JWT issuer/audience | Review suggestion | 02 |
+| F-04 | Test for wrong JWT issuer/audience | Review suggestion | **DONE in Phase 02** (issuer, audience, algorithm) |
 | F-05 | Web: navigate to login when a retried request still returns 401 after a successful refresh | Review suggestion | 02 |
 | F-06 | Re-evaluate EdDSA vs HS256 access tokens | SECURITY_DESIGN §4 | 09 |
 | F-07 | 3 moderate npm advisories (typeorm → minimatch), no high/critical | npm audit | Re-check each phase |
 
 ## Change log
+- 2026-11-15 — Phase 02 implemented; live run against HN/SO/GitHub/RSS succeeded; YouTube key pending (user's editor tab unsaved / variable misspelled `YOUTIBE_API_KEY`).
 - 2026-11-15 — Phase 01 ACCEPTED (CI 4/4 green on 67ff191; review ACCEPT). PR #2 merged.
 - 2026-11-15 — Phase 01 implemented; review round 1 found 5 medium issues, all fixed with tests; F-01..F-07 tracked.
 - 2026-11-14 — Phase 00 ACCEPTED by the user; phases 01–09 pre-approved on passing criteria. Phase 01 started.

@@ -1,0 +1,44 @@
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+section {
+  margin-top: 24px;
+}
+
+.evidence {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+
+  li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    overflow-wrap: anywhere;
+  }
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.raw-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 0;
+  font: var(--mat-sys-body-small);
+
+  div {
+    display: flex;
+    gap: 4px;
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+  }
+}

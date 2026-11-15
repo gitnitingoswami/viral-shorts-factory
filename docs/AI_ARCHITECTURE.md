@@ -65,6 +65,14 @@ Each interface has a **mock implementation** used in unit tests, CI, and local d
 | Repeatability | Evergreen-ness (topic recurs across weeks) | 0.05 |
 Normalization: min-max within a weekly collection with winsorization at p5/p95. **Missing data:** the component is excluded and the weights renormalized; the score carries `confidence = Σ available weights` and lists the missing components. Signals older than 14 days are flagged as stale.
 
+### 5a. As implemented in Phase 02 (`apps/api/src/research/scoring.ts`)
+- **Relevance filter:** a signal is kept only if a niche keyword appears in its *title or real source tags* (Stack Overflow tags, GitHub topics, feed categories). The query that found it, and a GitHub repo's language, never count: Algolia matches URLs and body text, and "written in TypeScript" is not topical. Exclude keywords drop a signal.
+- **Clustering:** deterministic greedy single pass in TypeScript, joining when token Jaccard ≥ 0.5 or the normalized URL is the same. This replaces the `pg_trgm` idea: same effect, unit-testable, no extension needed.
+- **Per-source normalization:** growth and demand are normalized within each source (HN points/day, GitHub stars/day, SO votes/day; HN comments, SO views), so different scales never compete directly.
+- **Evidence shrinkage:** `score = weighted × (0.5 + 0.5 × confidence)`. Renormalizing over available components alone let data-poor topics (e.g. a release note with only freshness + relevance) outrank well-evidenced ones (found in the first live run, 2026-11-15).
+- **YouTube competition:** checked only for the 15 strongest candidates per run (one `search.list`, `part=id`), so quota use is bounded and no titles or channel data are retrieved. Counts expire after 30 days.
+- **Source hygiene (GitHub):** `fork:false`, plus de-duplication of repos sharing a description, removes star-farmed clone clusters.
+
 ## 6. Prompt management
 - Prompts are versioned files in `libs/providers/prompts/{task}/{version}.md` with a front-matter schema reference; `promptId@version` is stored on every output.
 - Golden-set evaluations (Phase 03): ~20 fixed topics with expected properties (length, claims cited, code runs). Run in CI against **recorded** fixtures; live evaluation is run manually with an explicit cost estimate.

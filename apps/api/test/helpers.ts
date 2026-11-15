@@ -1,11 +1,12 @@
 import { INestApplication, INestApplicationContext } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import type { UserRole } from '@vsf/contracts';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { dataSourceOptions } from '../src/database/options';
+import { RESEARCH_HTTP } from '../src/research/adapters.provider';
+import type { HttpGet } from '../src/research/http';
 import { UsersService } from '../src/users/users.service';
 import { WorkerModule } from '../src/worker.module';
 
@@ -39,16 +40,22 @@ export async function resetTestDatabase(): Promise<void> {
   }
 }
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+/** Research HTTP that never touches the network unless a test provides fixtures. */
+const offlineHttp: HttpGet = (url) => Promise.reject(new Error(`network disabled in tests: ${new URL(url).hostname}`));
+
+export async function createTestApp(http: HttpGet = offlineHttp): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).overrideProvider(RESEARCH_HTTP).useValue(http).compile();
   const app = moduleRef.createNestApplication({ logger: false });
   configureApp(app);
   await app.init();
   return app;
 }
 
-export function createWorker(): Promise<INestApplicationContext> {
-  return NestFactory.createApplicationContext(WorkerModule, { logger: false });
+export async function createWorker(http: HttpGet = offlineHttp): Promise<INestApplicationContext> {
+  const moduleRef = await Test.createTestingModule({ imports: [WorkerModule] }).overrideProvider(RESEARCH_HTTP).useValue(http).compile();
+  moduleRef.useLogger(false);
+  await moduleRef.init();
+  return moduleRef;
 }
 
 export async function createUser(app: INestApplication, email: string, password: string, role: UserRole) {

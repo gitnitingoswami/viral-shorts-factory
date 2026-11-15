@@ -1,79 +1,62 @@
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Job } from 'bullmq';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { JOB_TYPE_PING, QUEUE_MAINTENANCE } from '../common/constants';
-import { JobEntity } from '../database/entities';
-import type { QueuePayload } from './jobs.service';
+import type { AppEnv } from '../config/env.schema';
+import { JobsService, QueuePayload } from './jobs.service';
+import { WORKER_ID } from './worker-id';
 
 /**
- * Worker for the `maintenance` queue. Each step updates the Postgres job row, which is the source of
- * truth for status, attempts and progress. Only registered in the worker process (src/worker.ts).
+ * Worker for the `maintenance` queue. The Postgres job row is the source of truth; work happens only under a
+ * lease held by this worker (claim → work → complete/fail). Only registered in the worker process.
  */
 @Processor(QUEUE_MAINTENANCE, { concurrency: 2 })
 export class MaintenanceProcessor extends WorkerHost {
   private readonly logger = new Logger(MaintenanceProcessor.name);
+  private readonly leaseMs: number;
 
   constructor(
-    @InjectRepository(JobEntity) private readonly repo: Repository<JobEntity>,
+    private readonly jobs: JobsService,
     private readonly dataSource: DataSource,
     private readonly audit: AuditService,
+    config: ConfigService<AppEnv, true>,
   ) {
     super();
+    this.leaseMs = config.get('JOB_LEASE_MS', { infer: true });
   }
 
   async process(job: Job<QueuePayload>): Promise<Record<string, unknown>> {
-    const { jobId } = job.data;
-    // Claim: only unfinished rows with attempts left can move to running (see follow-up F-01 for leases).
-    const claimed = await this.repo
-      .createQueryBuilder()
-      .update()
-      .set({ status: 'running', attempt: () => 'attempt + 1', startedAt: () => 'now()', error: null })
-      .where('id = :jobId AND status IN (:...statuses) AND attempt < max_attempts', { jobId, statuses: ['queued', 'running'] })
-      .returning(['id', 'type', 'workspace_id'])
-      .execute();
-    const row = (claimed.raw as Array<{ id: string; type: string; workspace_id: string }>)[0];
-    if (!row) {
-      // Attempts exhausted (e.g. the job kept crashing the worker): fail it instead of retrying forever.
-      await this.repo
-        .createQueryBuilder()
-        .update()
-        .set({ status: 'failed', error: 'Max attempts exhausted', finishedAt: () => 'now()' })
-        .where(`id = :jobId AND status IN ('queued', 'running') AND attempt >= max_attempts`, { jobId })
-        .execute();
-      this.logger.warn({ jobId }, 'Job finished, cancelled or out of attempts; skipping');
+    const claimed = await this.jobs.claim(job.data.jobId, WORKER_ID, this.leaseMs);
+    if (!claimed) {
+      this.logger.warn({ jobId: job.data.jobId }, 'Job not claimable (finished, leased elsewhere, or out of attempts)');
       return { skipped: true };
     }
 
-    switch (row.type) {
+    switch (claimed.type) {
       case JOB_TYPE_PING: {
         const started = Date.now();
         await this.dataSource.query('SELECT 1');
         const output = { pong: true, dbLatencyMs: Date.now() - started };
-        await this.repo.update(jobId, { status: 'completed', progress: 100, output, finishedAt: new Date() });
-        await this.audit.record({ actorType: 'worker', workspaceId: row.workspace_id, action: 'job.completed', subjectType: 'job', subjectId: jobId, outcome: 'success', details: { type: row.type } });
+        if (await this.jobs.complete(claimed.id, WORKER_ID, output)) {
+          await this.audit.record({ actorType: 'worker', workspaceId: claimed.workspaceId, action: 'job.completed', subjectType: 'job', subjectId: claimed.id, outcome: 'success', details: { type: claimed.type } });
+        }
         return output;
       }
       default:
-        throw new Error(`Unsupported job type: ${row.type}`);
+        throw new Error(`Unsupported job type: ${claimed.type}`);
     }
   }
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job<QueuePayload> | undefined, err: Error): Promise<void> {
     if (!job) return;
-    const finalAttempt = job.attemptsMade >= (job.opts.attempts ?? 1);
-    await this.repo.update(
-      { id: job.data.jobId, status: In(['running', 'queued']) },
-      finalAttempt
-        ? { status: 'failed', error: err.message.slice(0, 500), finishedAt: new Date() }
-        : { status: 'queued', error: err.message.slice(0, 500) },
-    );
-    if (finalAttempt) {
-      const owner = await this.repo.findOne({ where: { id: job.data.jobId }, select: { id: true, workspaceId: true } });
-      await this.audit.record({ actorType: 'worker', workspaceId: owner?.workspaceId, action: 'job.failed', subjectType: 'job', subjectId: job.data.jobId, outcome: 'failure', details: { error: err.message.slice(0, 200) } });
+    const final = job.attemptsMade >= (job.opts.attempts ?? 1);
+    await this.jobs.fail(job.data.jobId, WORKER_ID, err.message, final);
+    if (final) {
+      await this.audit.record({ actorType: 'worker', action: 'job.failed', subjectType: 'job', subjectId: job.data.jobId, outcome: 'failure', details: { error: err.message.slice(0, 200) } });
     }
   }
 }

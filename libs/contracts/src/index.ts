@@ -148,3 +148,158 @@ export interface ApiError {
   message: string | string[];
   correlationId?: string;
 }
+
+// ======================= Phase 02: trend research =======================
+
+export type ResearchSourceKey = 'hackernews' | 'stackexchange' | 'github' | 'rss' | 'youtube';
+
+export interface ResearchSourceDto {
+  key: ResearchSourceKey;
+  name: string;
+  enabled: boolean;
+  /** False when a required credential (e.g. YouTube API key) is not configured; the source is then skipped. */
+  configured: boolean;
+  termsUrl: string;
+  termsNotes: string;
+}
+
+export interface NicheDto {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  /** Lower-case keywords/tags that define relevance (e.g. "typescript", "node.js", "git"). */
+  keywords: string[];
+  excludeKeywords: string[];
+  active: boolean;
+  createdAt: string;
+}
+
+/** POST /api/niches (owner); PATCH /api/niches/:id (owner) accepts any subset. */
+export interface UpsertNicheRequest {
+  name: string;
+  description?: string;
+  keywords: string[];
+  excludeKeywords?: string[];
+  active?: boolean;
+}
+
+export type CollectionStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed';
+
+export interface SourceRunResult {
+  source: ResearchSourceKey;
+  status: 'ok' | 'failed' | 'skipped';
+  signals: number;
+  durationMs: number;
+  /** Short, non-sensitive reason when failed/skipped. */
+  message?: string;
+}
+
+export interface TrendCollectionDto {
+  id: string;
+  nicheId: string;
+  trigger: 'manual' | 'scheduled';
+  status: CollectionStatus;
+  windowStart: string;
+  windowEnd: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  sourceResults: SourceRunResult[];
+  topicCount: number;
+  jobId: string | null;
+  createdAt: string;
+}
+
+/** POST /api/research/runs (owner) → 202 with the collection (idempotent per idempotencyKey). */
+export interface StartResearchRunRequest {
+  nicheId: string;
+  idempotencyKey: string;
+}
+
+export type ScoreComponent = 'freshness' | 'growth' | 'relevance' | 'competition' | 'demand' | 'repeatability';
+
+export interface ScoreComponentDetail {
+  component: ScoreComponent;
+  weight: number;
+  /** Normalized 0..1 value, or null when the data was unavailable (component excluded, weights renormalized). */
+  value: number | null;
+  /** Plain-language explanation of the inputs, e.g. "142 HN points/day (max in collection 310)". */
+  explanation: string;
+}
+
+export type TopicStatus = 'new' | 'approved' | 'rejected';
+
+export interface TrendTopicDto {
+  id: string;
+  collectionId: string;
+  title: string;
+  /** Final score 0..1 (weighted over available components). */
+  score: number;
+  /** Sum of weights of available components (0..1): how much of the model had data. */
+  confidence: number;
+  breakdown: ScoreComponentDetail[];
+  missingComponents: ScoreComponent[];
+  /** True when the newest supporting signal is older than 14 days. */
+  stale: boolean;
+  sources: ResearchSourceKey[];
+  signalCount: number;
+  status: TopicStatus;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+
+export interface TrendSignalDto {
+  id: string;
+  source: ResearchSourceKey;
+  title: string;
+  url: string;
+  publishedAt: string | null;
+  retrievedAt: string;
+  /** Raw metrics exactly as returned by the source (e.g. points, comments, stars). */
+  metrics: Record<string, number>;
+}
+
+export interface TrendMetricDto {
+  name: string;
+  value: number;
+  unit: string;
+  source: ResearchSourceKey;
+  observedAt: string;
+  retrievedAt: string;
+}
+
+/** GET /api/research/topics/:id — evidence for one topic. */
+export interface TrendTopicDetailDto extends TrendTopicDto {
+  signals: TrendSignalDto[];
+  metrics: TrendMetricDto[];
+}
+
+/**
+ * GET /api/research/collections/:id/topics?status=&minScore=&q=&sort=score|freshness|confidence&limit=&offset=
+ * returns Page<TrendTopicDto>. GET /api/research/topics/compare?ids=a,b,c returns TrendTopicDetailDto[] (2–4 ids).
+ */
+
+/** POST /api/research/topics/:id/decision (owner or reviewer). */
+export interface TopicDecisionRequest {
+  decision: 'approved' | 'rejected';
+  note?: string;
+}
+
+/** GET /api/research/collections/:id/report */
+export interface WeeklyTrendReportDto {
+  collectionId: string;
+  generatedAt: string;
+  /** Markdown report: top topics with evidence links, source coverage, limitations. Render as text, never as HTML. */
+  markdown: string;
+  limitations: string[];
+}
+
+/** GET /api/budget/summary (owner) — month-to-date spend vs. budget. */
+export interface BudgetSummaryDto {
+  period: string; // YYYY-MM
+  currency: 'USD';
+  limitMinor: number;
+  spentMinor: number;
+  warnPct: number;
+  status: 'ok' | 'warning' | 'exceeded';
+}

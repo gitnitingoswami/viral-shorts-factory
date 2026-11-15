@@ -6,10 +6,11 @@ import { DatabaseModule } from './database/database.module';
 import { JobsCoreModule, QueueRootModule } from './jobs/jobs.module';
 import { JobsReconciler } from './jobs/jobs-reconciler.service';
 import { MaintenanceProcessor } from './jobs/maintenance.processor';
+import { ResearchWorkerModule } from './research/research.module';
 
 /** Background worker process: queue processors only, no HTTP server. */
 @Module({
-  imports: [AppConfigModule, AppLoggerModule, DatabaseModule, QueueRootModule, AuditModule, JobsCoreModule],
+  imports: [AppConfigModule, AppLoggerModule, DatabaseModule, QueueRootModule, AuditModule, JobsCoreModule, ResearchWorkerModule],
   providers: [MaintenanceProcessor, JobsReconciler],
 })
 export class WorkerModule {}

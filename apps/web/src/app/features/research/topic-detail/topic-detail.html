@@ -1,0 +1,108 @@
+<p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
+@if (loading()) {
+  <div class="state" role="status">
+    <mat-spinner diameter="24" aria-label="Loading topic" />
+    <span>Loading topic…</span>
+  </div>
+} @else if (error(); as message) {
+  <div class="state state-error" role="alert">
+    <span>{{ message }}</span>
+    <button mat-stroked-button type="button" (click)="load()">Retry</button>
+  </div>
+} @else if (topic(); as t) {
+  <div class="page-header">
+    <h1 class="page-title">{{ t.title }}</h1>
+    <div class="actions">
+      <a mat-stroked-button [routerLink]="['/research/collections', t.collectionId]">Back to topics</a>
+    </div>
+  </div>
+
+  <p class="meta">
+    <span class="chip chip-{{ t.status }}" data-testid="topic-status">{{ t.status }}</span>
+    @if (t.stale) {
+      <span class="chip chip-stale">Stale (newest signal &gt; 14 days)</span>
+    }
+    <span>Sources: {{ t.sources.map(sourceLabel).join(', ') || '—' }}</span>
+    <span>{{ t.signalCount }} signals</span>
+    @if (t.decisionNote) {
+      <span>Note: {{ t.decisionNote }}</span>
+    }
+  </p>
+
+  @if (canDecide()) {
+    <app-decision-controls [topic]="t" [busy]="deciding()" (decide)="decide($event)" />
+  }
+
+  <section aria-labelledby="breakdown-heading">
+    <h2 id="breakdown-heading" class="section-title">Score breakdown</h2>
+    <app-score-breakdown [topic]="t" />
+  </section>
+
+  <section aria-labelledby="evidence-heading">
+    <h2 id="evidence-heading" class="section-title">Evidence ({{ t.signals.length }})</h2>
+    @if (t.signals.length === 0) {
+      <p class="state">No signals recorded for this topic.</p>
+    } @else {
+      <ul class="evidence" data-testid="evidence">
+        @for (s of t.signals; track s.id) {
+          <li>
+            <span class="chip">{{ sourceLabel(s.source) }}</span>
+            @if (safeHref(s.url); as href) {
+              <a [href]="href" target="_blank" rel="noopener noreferrer">
+                {{ s.title }}<span class="visually-hidden"> (opens in a new tab)</span>
+              </a>
+            } @else {
+              <span>{{ s.title }}</span>
+            }
+            <div class="muted small">
+              Published {{ s.publishedAt ? (s.publishedAt | date: 'medium') : 'unknown' }} · retrieved
+              {{ s.retrievedAt | date: 'medium' }}
+            </div>
+            @if ((s.metrics | keyvalue).length) {
+              <dl class="raw-metrics">
+                @for (m of s.metrics | keyvalue; track m.key) {
+                  <div>
+                    <dt>{{ m.key }}</dt>
+                    <dd>{{ m.value }}</dd>
+                  </div>
+                }
+              </dl>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section aria-labelledby="metrics-heading">
+    <h2 id="metrics-heading" class="section-title">Metrics with provenance</h2>
+    @if (t.metrics.length === 0) {
+      <p class="state">No metrics recorded.</p>
+    } @else {
+      <div class="table-scroll">
+        <table class="data-table" data-testid="metrics">
+          <thead>
+            <tr>
+              <th scope="col">Metric</th>
+              <th scope="col">Value</th>
+              <th scope="col">Source</th>
+              <th scope="col">Observed</th>
+              <th scope="col">Retrieved</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of t.metrics; track $index) {
+              <tr>
+                <th scope="row">{{ m.name }}</th>
+                <td>{{ m.value }} {{ m.unit }}</td>
+                <td>{{ sourceLabel(m.source) }}</td>
+                <td>{{ m.observedAt | date: 'medium' }}</td>
+                <td>{{ m.retrievedAt | date: 'medium' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+}

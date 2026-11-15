@@ -71,7 +71,7 @@ Source: [reference](https://developers.google.com/youtube/analytics/reference).
 ## 5. Developer-trend sources (coding niche)
 | Source | Access | Terms note | Signals |
 |---|---|---|---|
-| Hacker News Firebase API | Public, no auth | [A] Permissive; respect rate limits | Top/best stories, points, comments |
+| Hacker News search (Algolia `hn.algolia.com/api/v1`) | Public, no auth | [A] Permissive; respect rate limits. Used instead of the Firebase API: one query per keyword instead of hundreds of item fetches | Stories in the window, points, comments |
 | Stack Exchange API v2.3 | Public; app key raises quota | [A] Attribution (CC BY-SA) required for content reuse; we use metadata only | Tag activity, question velocity |
 | GitHub REST search | Token; 30 search req/min authenticated [S] | [A] API terms allow this use | New repos by stars, topic growth |
 | Dev.to API / RSS, official release-note feeds (Node, TypeScript, Angular) | Public | [A] Use headlines/links only; don't republish text | Release and topic timing |

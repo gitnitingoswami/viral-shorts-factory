@@ -1,0 +1,148 @@
+<div class="page-header">
+  <h1 class="page-title">Niches</h1>
+  <div class="actions">
+    <a mat-stroked-button routerLink="/research">Back to research</a>
+  </div>
+</div>
+
+@if (isOwner()) {
+  <mat-card appearance="outlined" class="form-card">
+    <mat-card-content>
+      <h2 class="section-title" id="niche-form-heading">{{ editingId() ? 'Edit niche' : 'Create a niche' }}</h2>
+      <form
+        [formGroup]="form"
+        (ngSubmit)="save()"
+        novalidate
+        class="niche-form"
+        aria-labelledby="niche-form-heading"
+      >
+        <mat-form-field appearance="outline">
+          <mat-label>Name</mat-label>
+          <input matInput formControlName="name" required data-testid="niche-name" />
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>Name is required.</mat-error>
+          } @else if (form.controls.name.hasError('maxlength')) {
+            <mat-error>Name must be at most 100 characters.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Description</mat-label>
+          <textarea matInput formControlName="description" rows="2"></textarea>
+          @if (form.controls.description.hasError('maxlength')) {
+            <mat-error>Description must be at most 500 characters.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="wide">
+          <mat-label>Keywords</mat-label>
+          <mat-chip-grid #keywordGrid formControlName="keywords" aria-label="Keywords" required>
+            @for (k of form.controls.keywords.value; track k) {
+              <mat-chip-row (removed)="removeKeyword('keywords', k)">
+                {{ k }}
+                <button matChipRemove type="button" [attr.aria-label]="'Remove keyword ' + k">✕</button>
+              </mat-chip-row>
+            }
+            <input
+              placeholder="Add keyword and press Enter"
+              data-testid="keyword-input"
+              [matChipInputFor]="keywordGrid"
+              [matChipInputSeparatorKeyCodes]="separatorKeys"
+              [matChipInputAddOnBlur]="true"
+              (matChipInputTokenEnd)="addKeyword('keywords', $event)"
+            />
+          </mat-chip-grid>
+          <mat-hint>Lower-case keywords or tags, e.g. typescript, node.js</mat-hint>
+          @if (form.controls.keywords.hasError('required')) {
+            <mat-error>Add at least one keyword.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="wide">
+          <mat-label>Exclude keywords</mat-label>
+          <mat-chip-grid #excludeGrid formControlName="excludeKeywords" aria-label="Exclude keywords">
+            @for (k of form.controls.excludeKeywords.value; track k) {
+              <mat-chip-row (removed)="removeKeyword('excludeKeywords', k)">
+                {{ k }}
+                <button matChipRemove type="button" [attr.aria-label]="'Remove excluded keyword ' + k">✕</button>
+              </mat-chip-row>
+            }
+            <input
+              placeholder="Add excluded keyword"
+              data-testid="exclude-input"
+              [matChipInputFor]="excludeGrid"
+              [matChipInputSeparatorKeyCodes]="separatorKeys"
+              [matChipInputAddOnBlur]="true"
+              (matChipInputTokenEnd)="addKeyword('excludeKeywords', $event)"
+            />
+          </mat-chip-grid>
+        </mat-form-field>
+
+        <mat-slide-toggle formControlName="active">Active</mat-slide-toggle>
+
+        <div class="form-actions">
+          <button mat-flat-button type="submit" [disabled]="saving()">
+            {{ saving() ? 'Saving…' : editingId() ? 'Save changes' : 'Create niche' }}
+          </button>
+          @if (editingId()) {
+            <button mat-stroked-button type="button" (click)="cancelEdit()">Cancel</button>
+          }
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+}
+
+<section aria-labelledby="niche-list-heading" aria-live="polite">
+  <h2 id="niche-list-heading" class="section-title">Configured niches</h2>
+  @if (loading()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading niches" />
+      <span>Loading niches…</span>
+    </div>
+  } @else if (error(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="load()">Retry</button>
+    </div>
+  } @else if (niches().length === 0) {
+    <p class="state" data-testid="niches-empty">No niches yet.</p>
+  } @else {
+    <div class="table-scroll">
+      <table class="data-table" data-testid="niches-table">
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Keywords</th>
+            <th scope="col">Excluded</th>
+            <th scope="col">Status</th>
+            @if (isOwner()) {
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (n of niches(); track n.id) {
+            <tr [attr.data-niche]="n.id">
+              <td>{{ n.name }}</td>
+              <td>{{ n.description || '—' }}</td>
+              <td>{{ n.keywords.join(', ') }}</td>
+              <td>{{ n.excludeKeywords.join(', ') || '—' }}</td>
+              <td>
+                <span class="chip" [class.chip-ok]="n.active">{{ n.active ? 'Active' : 'Inactive' }}</span>
+              </td>
+              @if (isOwner()) {
+                <td>
+                  <button mat-button type="button" (click)="edit(n)" [attr.aria-label]="'Edit ' + n.name">
+                    Edit
+                  </button>
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

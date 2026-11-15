@@ -1,0 +1,203 @@
+<div class="page-header">
+  <h1 class="page-title">Trend research</h1>
+  <div class="actions">
+    <a mat-stroked-button routerLink="/research/niches">Manage niches</a>
+  </div>
+</div>
+
+<p class="visually-hidden" aria-live="polite" data-testid="status-announcement">{{ announcement() }}</p>
+
+<section class="toolbar" aria-label="Niche and run controls">
+  @if (nichesLoading()) {
+    <div class="state" role="status">
+      <mat-spinner diameter="24" aria-label="Loading niches" />
+      <span>Loading niches…</span>
+    </div>
+  } @else if (nichesError(); as message) {
+    <div class="state state-error" role="alert">
+      <span>{{ message }}</span>
+      <button mat-stroked-button type="button" (click)="loadNiches()">Retry</button>
+    </div>
+  } @else if (niches().length === 0) {
+    <p class="state" data-testid="no-niches">
+      No niches yet.
+      @if (isOwner()) {
+        <a routerLink="/research/niches">Create a niche</a> to start researching.
+      } @else {
+        Ask an owner to create one.
+      }
+    </p>
+  } @else {
+    <mat-form-field appearance="outline" class="niche-field">
+      <mat-label>Niche</mat-label>
+      <select matNativeControl data-testid="niche-select" (change)="onNicheChange($event)">
+        @for (n of niches(); track n.id) {
+          <option [value]="n.id" [selected]="n.id === nicheId()">
+            {{ n.name }}{{ n.active ? '' : ' (inactive)' }}
+          </option>
+        }
+      </select>
+    </mat-form-field>
+    @if (isOwner()) {
+      <button
+        mat-flat-button
+        type="button"
+        data-testid="run-now"
+        [disabled]="!nicheId() || starting()"
+        (click)="runNow()"
+      >
+        {{ starting() ? 'Starting…' : 'Run research now' }}
+      </button>
+    }
+    @if (selectedNiche(); as n) {
+      <p class="muted niche-keywords">Keywords: {{ n.keywords.join(', ') }}</p>
+    }
+  }
+</section>
+
+<div class="layout">
+  <section class="collections" aria-labelledby="collections-heading">
+    <h2 id="collections-heading" class="section-title">Collections</h2>
+    @if (collectionsLoading() && !collections()) {
+      <div class="state" role="status">
+        <mat-spinner diameter="24" aria-label="Loading collections" />
+        <span>Loading collections…</span>
+      </div>
+    } @else if (collectionsError(); as message) {
+      <div class="state state-error" role="alert">
+        <span>{{ message }}</span>
+        <button mat-stroked-button type="button" (click)="loadCollections()">Retry</button>
+      </div>
+    } @else if (collections(); as page) {
+      @if (page.items.length === 0) {
+        <p class="state" data-testid="collections-empty">No research runs for this niche yet.</p>
+      } @else {
+        <div class="table-scroll">
+          <table class="data-table" data-testid="collections-table">
+            <thead>
+              <tr>
+                <th scope="col">Created</th>
+                <th scope="col">Status</th>
+                <th scope="col">Trigger</th>
+                <th scope="col">Window</th>
+                <th scope="col">Topics</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of page.items; track c.id) {
+                <tr [attr.data-collection]="c.id" [class.selected]="c.id === selectedId()">
+                  <td>{{ c.createdAt | date: 'medium' }}</td>
+                  <td>
+                    <span class="chip chip-{{ c.status }}" data-testid="collection-status">{{ c.status }}</span>
+                  </td>
+                  <td>{{ c.trigger }}</td>
+                  <td>{{ c.windowStart | date: 'mediumDate' }} – {{ c.windowEnd | date: 'mediumDate' }}</td>
+                  <td>{{ c.topicCount }}</td>
+                  <td class="row-actions">
+                    <button
+                      mat-button
+                      type="button"
+                      [attr.aria-pressed]="c.id === selectedId()"
+                      (click)="select(c)"
+                    >
+                      Details
+                    </button>
+                    <a mat-button [routerLink]="['/research/collections', c.id]">Topics</a>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+
+    @if (selected(); as c) {
+      <section class="detail" aria-labelledby="selected-heading" data-testid="selected-collection">
+        <h3 id="selected-heading" class="section-title">
+          Run {{ c.createdAt | date: 'medium' }} —
+          <span class="chip chip-{{ c.status }}">{{ c.status }}</span>
+          @if (!isTerminal(c.status)) {
+            <span class="muted">(refreshing every 5 s)</span>
+          }
+        </h3>
+        <p class="muted">
+          Started {{ c.startedAt ? (c.startedAt | date: 'medium') : 'not yet' }} · finished
+          {{ c.finishedAt ? (c.finishedAt | date: 'medium') : 'not yet' }}
+        </p>
+        @if (c.sourceResults.length === 0) {
+          <p class="state">No source results yet.</p>
+        } @else {
+          <div class="table-scroll">
+            <table class="data-table" data-testid="source-results">
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col">Result</th>
+                  <th scope="col">Signals</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of c.sourceResults; track r.source) {
+                  <tr [attr.data-source]="r.source">
+                    <th scope="row">{{ sourceLabel(r.source) }}</th>
+                    <td><span class="chip chip-{{ r.status }}">{{ r.status }}</span></td>
+                    <td>{{ r.signals }}</td>
+                    <td>{{ r.durationMs / 1000 }} s</td>
+                    <td>{{ r.message ?? '—' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+        @if (isTerminal(c.status)) {
+          <p class="links">
+            <a [routerLink]="['/research/collections', c.id]">View topics</a>
+            <a [routerLink]="['/research/collections', c.id, 'report']">Weekly report</a>
+          </p>
+        }
+      </section>
+    }
+  </section>
+
+  <aside class="sources" aria-labelledby="sources-heading">
+    <h2 id="sources-heading" class="section-title">Source registry</h2>
+    @if (sourcesLoading()) {
+      <div class="state" role="status">
+        <mat-spinner diameter="24" aria-label="Loading sources" />
+        <span>Loading sources…</span>
+      </div>
+    } @else if (sourcesError(); as message) {
+      <div class="state state-error" role="alert">
+        <span>{{ message }}</span>
+        <button mat-stroked-button type="button" (click)="loadSources()">Retry</button>
+      </div>
+    } @else if (sources().length === 0) {
+      <p class="state">No sources registered.</p>
+    } @else {
+      <ul class="source-list" data-testid="sources">
+        @for (s of sources(); track s.key) {
+          <li [attr.data-source]="s.key">
+            <strong>{{ s.name }}</strong>
+            @if (!s.enabled) {
+              <span class="chip chip-skipped">Disabled</span>
+            } @else if (!s.configured) {
+              <span class="chip chip-warning" data-testid="source-state">
+                Not configured{{ sourceImpact[s.key] ? ' — ' + sourceImpact[s.key] : '' }}
+              </span>
+            } @else {
+              <span class="chip chip-ok" data-testid="source-state">Configured</span>
+            }
+            @if (s.termsNotes) {
+              <div class="muted small">{{ s.termsNotes }}</div>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </aside>
+</div>

@@ -19,6 +19,7 @@ html {
   @include mat.strong-focus-indicators-theme((color: (primary: mat.$azure-palette)));
 
   --app-status-ok: light-dark(#1b6b2f, #7bd88f);
+  --app-status-warn: light-dark(#8a5300, #ffb951);
 }
 
 html,
@@ -111,4 +112,44 @@ a {
   --mat-snack-bar-container-color: var(--mat-sys-error-container);
   --mat-snack-bar-supporting-text-color: var(--mat-sys-on-error-container);
   --mat-snack-bar-button-color: var(--mat-sys-on-error-container);
+}
+
+/* Status chips: always text + color, never color-only. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  font: var(--mat-sys-label-medium);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.chip-ok,
+.chip-completed,
+.chip-approved {
+  color: var(--app-status-ok);
+  border-color: currentColor;
+}
+
+.chip-failed,
+.chip-rejected,
+.chip-exceeded {
+  color: var(--mat-sys-error);
+  border-color: currentColor;
+}
+
+.chip-partial,
+.chip-warning,
+.chip-stale,
+.chip-skipped {
+  color: var(--app-status-warn);
+  border-color: currentColor;
+}
+
+.chip-running,
+.chip-queued {
+  color: var(--mat-sys-primary);
+  border-color: currentColor;
 }

@@ -1,6 +1,7 @@
 import { INestApplication, INestApplicationContext } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
+import { JwtService } from '@nestjs/jwt';
 import { DataSource } from 'typeorm';
 import { cookieFrom, createTestApp, createUser, createWorker, resetTestDatabase, waitFor } from './helpers';
 
@@ -57,6 +58,20 @@ describe('API (e2e)', () => {
       const res = await request(http).get('/api/channels').set('X-Correlation-Id', 'e2e-correlation-0001').expect(401);
       expect(res.body).toMatchObject({ statusCode: 401, error: 'Unauthorized', correlationId: 'e2e-correlation-0001' });
       expect(res.headers['x-correlation-id']).toBe('e2e-correlation-0001');
+    });
+
+    it('rejects tokens signed with the right secret but the wrong issuer, audience, or algorithm (F-04)', async () => {
+      const jwt = app.get(JwtService);
+      const secret = process.env.JWT_ACCESS_SECRET!;
+      const payload = { sub: '00000000-0000-4000-8000-0000000000aa', role: 'owner', ws: '00000000-0000-4000-8000-000000000001' };
+      const wrongIss = jwt.sign(payload, { secret, issuer: 'evil', audience: 'vsf-web', algorithm: 'HS256' });
+      const wrongAud = jwt.sign(payload, { secret, issuer: 'vsf-api', audience: 'other', algorithm: 'HS256' });
+      const wrongAlg = jwt.sign(payload, { secret, issuer: 'vsf-api', audience: 'vsf-web', algorithm: 'HS512' });
+      for (const t of [wrongIss, wrongAud, wrongAlg]) {
+        await request(http).get('/api/auth/me').set('Authorization', `Bearer ${t}`).expect(401);
+      }
+      const ok = jwt.sign(payload, { secret, issuer: 'vsf-api', audience: 'vsf-web', algorithm: 'HS256' });
+      await request(http).get('/api/channels').set('Authorization', `Bearer ${ok}`).expect(200);
     });
 
     it('rejects a tampered token', async () => {

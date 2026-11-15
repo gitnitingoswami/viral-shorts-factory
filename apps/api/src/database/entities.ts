@@ -96,6 +96,8 @@ export class JobEntity {
   @Column('uuid', { name: 'created_by', nullable: true }) createdBy: string | null;
   @Column('timestamptz', { name: 'started_at', nullable: true }) startedAt: Date | null;
   @Column('timestamptz', { name: 'finished_at', nullable: true }) finishedAt: Date | null;
+  @Column('text', { name: 'lease_owner', nullable: true }) leaseOwner: string | null;
+  @Column('timestamptz', { name: 'lease_until', nullable: true }) leaseUntil: Date | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt: Date;
 }
@@ -116,7 +118,10 @@ export class AuditEventEntity {
   @Column('jsonb', { default: () => "'{}'::jsonb" }) details: Record<string, unknown>;
 }
 
+import { RESEARCH_ENTITIES } from './research.entities';
+
 export const ALL_ENTITIES = [
+  ...RESEARCH_ENTITIES,
   WorkspaceEntity,
   UserAccountEntity,
   RefreshSessionEntity,

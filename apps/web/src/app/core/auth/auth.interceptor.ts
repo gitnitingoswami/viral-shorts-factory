@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { isApiUrl } from '../http/api-error';
+import { safeReturnUrl } from './auth.guard';
 import { AUTH_URLS, AuthService } from './auth.service';
 
 /** Endpoints that must never carry the bearer token or trigger a refresh-and-retry. */
@@ -30,16 +31,31 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       if (!(err instanceof HttpErrorResponse) || err.status !== 401 || path === AUTH_URLS.logout) {
         return throwError(() => err);
       }
+      /** Session is unrecoverable: clear it and send the user to sign in (no further refresh). */
+      const expire = (): void => {
+        auth.clearSession();
+        const current = router.url;
+        const keep = current && current !== '/' && !current.startsWith('/login');
+        void router.navigate(['/login'], {
+          queryParams: keep ? { returnUrl: safeReturnUrl(current) } : {},
+        });
+      };
       return auth.refresh().pipe(
         catchError(() => {
-          auth.clearSession();
-          const returnUrl = router.url;
-          void router.navigate(['/login'], {
-            queryParams: returnUrl && returnUrl !== '/' && !returnUrl.startsWith('/login') ? { returnUrl } : {},
-          });
+          expire();
           return throwError(() => err);
         }),
-        switchMap((res) => next(withBearer(req, res.accessToken))),
+        // Exactly one retry per original request: the retry's 401 is terminal, never refreshed again.
+        switchMap((res) =>
+          next(withBearer(req, res.accessToken)).pipe(
+            catchError((retryErr: unknown) => {
+              if (retryErr instanceof HttpErrorResponse && retryErr.status === 401) {
+                expire();
+              }
+              return throwError(() => retryErr);
+            }),
+          ),
+        ),
       );
     }),
   );

@@ -104,13 +104,49 @@ describe('authInterceptor', () => {
   });
 
   it('does not retry more than once if the retried request is also 401', () => {
+    vi.spyOn(router, 'navigate').mockResolvedValue(true);
     let status = 0;
     http.get('/api/jobs').subscribe({ error: (e: HttpErrorResponse) => (status = e.status) });
     httpMock.expectOne('/api/jobs').flush(null, unauthorized);
     httpMock.expectOne(AUTH_URLS.refresh).flush(makeTokenResponse('new-token'));
     httpMock.expectOne('/api/jobs').flush(null, unauthorized);
     httpMock.expectNone(AUTH_URLS.refresh);
+    httpMock.expectNone('/api/jobs');
     expect(status).toBe(401);
+  });
+
+  it('clears the session and redirects to /login with returnUrl when the retry is still 401', () => {
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/research/topics/t1?x=1');
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    let error: unknown;
+    http.get('/api/jobs').subscribe({ error: (e: unknown) => (error = e) });
+
+    httpMock.expectOne('/api/jobs').flush(null, unauthorized);
+    httpMock.expectOne(AUTH_URLS.refresh).flush(makeTokenResponse('new-token'));
+    const retry = httpMock.expectOne('/api/jobs');
+    expect(retry.request.headers.get('Authorization')).toBe('Bearer new-token');
+    retry.flush(null, unauthorized);
+
+    httpMock.expectNone(AUTH_URLS.refresh);
+    expect((error as HttpErrorResponse).status).toBe(401);
+    expect(auth.accessToken()).toBeNull();
+    expect(auth.currentUser()).toBeNull();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { returnUrl: '/research/topics/t1?x=1' },
+    });
+  });
+
+  it('does not redirect when the retry fails with a non-401 error', () => {
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    let status = 0;
+    http.get('/api/jobs').subscribe({ error: (e: HttpErrorResponse) => (status = e.status) });
+    httpMock.expectOne('/api/jobs').flush(null, unauthorized);
+    httpMock.expectOne(AUTH_URLS.refresh).flush(makeTokenResponse('new-token'));
+    httpMock.expectOne('/api/jobs').flush(null, { status: 500, statusText: 'Server Error' });
+    expect(status).toBe(500);
+    expect(auth.accessToken()).toBe('new-token');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('passes non-401 errors through untouched', () => {
