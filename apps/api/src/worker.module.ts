@@ -8,10 +8,12 @@ import { JobsReconciler } from './jobs/jobs-reconciler.service';
 import { MaintenanceProcessor } from './jobs/maintenance.processor';
 import { ResearchWorkerModule } from './research/research.module';
 import { ContentWorkerModule } from './content/content.module';
+import { VideoWorkerModule } from './video/video.module';
+import { InfraModule } from './infra/infra.module';
 
 /** Background worker process: queue processors only, no HTTP server. */
 @Module({
-  imports: [AppConfigModule, AppLoggerModule, DatabaseModule, QueueRootModule, AuditModule, JobsCoreModule, ResearchWorkerModule, ContentWorkerModule],
+  imports: [AppConfigModule, AppLoggerModule, DatabaseModule, InfraModule, QueueRootModule, AuditModule, JobsCoreModule, ResearchWorkerModule, ContentWorkerModule, VideoWorkerModule],
   providers: [MaintenanceProcessor, JobsReconciler],
 })
 export class WorkerModule {}

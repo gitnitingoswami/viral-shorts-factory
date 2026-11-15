@@ -51,6 +51,21 @@ export const envSchema = z
     CODE_SANDBOX_IMAGE: z.string().default('node:24.22.3-alpine'),
     CODE_SANDBOX_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(10_000),
 
+    // ---- Phase 04: video production ----
+    FFMPEG_PATH: z.string().default('ffmpeg'),
+    FFPROBE_PATH: z.string().default('ffprobe'),
+    ESPEAK_PATH: z.string().default('espeak-ng'),
+    /** Parallel renders per worker process (CPU-bound; keep low). */
+    RENDER_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(1),
+    /** Hard limit for one FFmpeg/TTS step; the child process is killed when exceeded. */
+    RENDER_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(60 * 60_000).default(10 * 60_000),
+    RENDER_WIDTH: z.coerce.number().int().default(1080),
+    RENDER_HEIGHT: z.coerce.number().int().default(1920),
+    RENDER_FPS: z.coerce.number().int().default(30),
+    RENDER_VIDEO_BITRATE_KBPS: z.coerce.number().int().min(500).max(50_000).default(6000),
+    /** Lifetime of signed media URLs used by the dashboard player. */
+    MEDIA_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+
     /** Variable AI/API spend guard (USD per calendar month). */
     MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(100),
 

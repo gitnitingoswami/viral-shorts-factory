@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { CreateBucketCommand, HeadBucketCommand, S3Client, S3ServiceException } from '@aws-sdk/client-s3';
+import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, HeadObjectCommand, PutObjectCommand, S3Client, S3ServiceException } from '@aws-sdk/client-s3';
+import type { Readable } from 'node:stream';
 import { ConfigService } from '@nestjs/config';
 import type { AppEnv } from '../config/env.schema';
 
@@ -55,5 +56,34 @@ export class StorageService implements OnModuleInit, OnModuleDestroy {
       await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
       this.logger.log(`Created bucket "${this.bucket}"`);
     }
+  }
+
+  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  /** Size of a stored object, or null when it does not exist. */
+  async headObject(key: string): Promise<{ bytes: number } | null> {
+    try {
+      const res = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return { bytes: Number(res.ContentLength ?? 0) };
+    } catch (err) {
+      const status = err instanceof S3ServiceException ? err.$metadata.httpStatusCode : undefined;
+      if (status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Streams an object, optionally a byte range ("bytes=start-end"), for media playback. */
+  async getObject(key: string, range?: string): Promise<{ body: Readable; contentLength: number; contentRange: string | null }> {
+    const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: range }));
+    return { body: res.Body as Readable, contentLength: Number(res.ContentLength ?? 0), contentRange: res.ContentRange ?? null };
+  }
+
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const { body } = await this.getObject(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) chunks.push(Buffer.from(chunk as Uint8Array));
+    return Buffer.concat(chunks);
   }
 }

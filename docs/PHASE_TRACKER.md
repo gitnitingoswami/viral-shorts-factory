@@ -8,7 +8,7 @@ Status values: `NOT_STARTED`, `PLANNED`, `IN_PROGRESS`, `BLOCKED`, `IN_REVIEW`, 
 | 01 | Project foundation | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_01_COMPLETION_REPORT.md` |
 | 02 | Weekly trend research engine | ACCEPTED (criteria passed; user pre-approval) | Lead Orchestrator | `tasks/reports/PHASE_02_COMPLETION_REPORT.md` |
 | 03 | AI content strategy and scripts | ACCEPTED (criteria passed; user pre-approval; live LLM run pending credits) | Lead Orchestrator | `tasks/reports/PHASE_03_COMPLETION_REPORT.md` |
-| 04 | AI video production | NOT_STARTED | Lead Orchestrator | — |
+| 04 | AI video production | IN_PROGRESS | Lead Orchestrator | — |
 | 05 | Social publishing engine | NOT_STARTED | Lead Orchestrator | — |
 | 06 | Analytics and performance | NOT_STARTED | Lead Orchestrator | — |
 | 07 | Monetization and finance | NOT_STARTED | Lead Orchestrator | — |

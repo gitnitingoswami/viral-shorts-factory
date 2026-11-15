@@ -5,7 +5,7 @@ import { Queue } from 'bullmq';
 import { In, LessThan, Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import type { JobDto, Page } from '@vsf/contracts';
-import { DEFAULT_WORKSPACE_ID, QUEUE_CONTENT, QUEUE_MAINTENANCE, QUEUE_RESEARCH } from '../common/constants';
+import { DEFAULT_WORKSPACE_ID, QUEUE_CONTENT, QUEUE_MAINTENANCE, QUEUE_RENDER, QUEUE_RESEARCH } from '../common/constants';
 import { JobEntity } from '../database/entities';
 
 export interface EnqueueInput {
@@ -65,11 +65,13 @@ export class JobsService {
     @InjectQueue(QUEUE_MAINTENANCE) maintenanceQueue: Queue,
     @InjectQueue(QUEUE_RESEARCH) researchQueue: Queue,
     @InjectQueue(QUEUE_CONTENT) contentQueue: Queue,
+    @InjectQueue(QUEUE_RENDER) renderQueue: Queue,
   ) {
     this.queues = new Map([
       [QUEUE_MAINTENANCE, maintenanceQueue],
       [QUEUE_RESEARCH, researchQueue],
       [QUEUE_CONTENT, contentQueue],
+      [QUEUE_RENDER, renderQueue],
     ]);
   }
 
@@ -148,6 +150,28 @@ export class JobsService {
           : { status: 'queued', error: message.slice(0, 500), leaseUntil: null },
       )
       .where(`id = :jobId AND status = 'running' AND lease_owner = :workerId`, { jobId, workerId })
+      .execute();
+    return (res.affected ?? 0) > 0;
+  }
+
+  /** Marks a running job cancelled (user request), only if this worker still holds the lease. */
+  async cancelRunning(jobId: string, workerId: string, reason: string): Promise<boolean> {
+    const res = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'cancelled', error: reason.slice(0, 500), finishedAt: () => 'now()', leaseUntil: null })
+      .where(`id = :jobId AND status = 'running' AND lease_owner = :workerId`, { jobId, workerId })
+      .execute();
+    return (res.affected ?? 0) > 0;
+  }
+
+  /** Cancels a job that no worker has claimed yet (claim() only takes queued jobs, so it is never started). */
+  async cancelQueued(jobId: string, reason: string): Promise<boolean> {
+    const res = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ status: 'cancelled', error: reason.slice(0, 500), finishedAt: () => 'now()' })
+      .where(`id = :jobId AND status = 'queued'`, { jobId })
       .execute();
     return (res.affected ?? 0) > 0;
   }

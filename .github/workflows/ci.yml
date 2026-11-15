@@ -50,6 +50,8 @@ jobs:
           echo "storage did not start"; exit 1
       - name: Pre-pull the code sandbox image (keeps the first sandbox run within test timeouts)
         run: docker pull -q node:24.22.3-alpine
+      - name: Install FFmpeg and eSpeak NG (video rendering tests)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg espeak-ng
       - run: npm ci --no-audit --no-fund
       - run: npm run build:contracts
       - name: Migrations up/down/up + API e2e + worker
@@ -67,6 +69,10 @@ jobs:
       - run: docker build -f infra/docker/web.Dockerfile -t vsf-web:ci .
       - name: API image loads in production mode (no dev-only dependencies needed)
         run: docker run --rm -e NODE_ENV=production vsf-api:ci node -e "require('./dist/common/logging'); require('argon2'); console.log('ok')"
+      - name: API image can render frames and run FFmpeg/eSpeak NG
+        run: |
+          docker run --rm vsf-api:ci node -e "const f=require('./dist/video/frames'); const png=f.renderPng(f.buildFrameSvg({width:720,height:1280,headline:'ok',code:null,caption:['ok'],progress:0,sceneLabel:'1/1'}).svg); if(png.length<1000) process.exit(1); console.log('frame ok', png.length)"
+          docker run --rm vsf-api:ci sh -c "ffmpeg -hide_banner -version | head -1 && echo test | espeak-ng --stdout --stdin | wc -c"
 
   security:
     name: Secret scan and dependency audit

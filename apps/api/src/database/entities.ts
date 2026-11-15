@@ -120,10 +120,12 @@ export class AuditEventEntity {
 
 import { CONTENT_ENTITIES } from './content.entities';
 import { RESEARCH_ENTITIES } from './research.entities';
+import { VIDEO_ENTITIES } from './video.entities';
 
 export const ALL_ENTITIES = [
   ...RESEARCH_ENTITIES,
   ...CONTENT_ENTITIES,
+  ...VIDEO_ENTITIES,
   WorkspaceEntity,
   UserAccountEntity,
   RefreshSessionEntity,

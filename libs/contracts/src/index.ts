@@ -492,3 +492,175 @@ export interface ScriptDecisionRequest {
   decision: 'approved' | 'rejected' | 'changes_requested';
   note?: string;
 }
+
+// ======================= Phase 04: video production =======================
+
+export type MediaKind = 'image' | 'audio' | 'font' | 'music' | 'code_frame' | 'video' | 'captions';
+
+/** Rights and provenance are mandatory for every stored asset (license NOT NULL). */
+export interface MediaAssetDto {
+  id: string;
+  kind: MediaKind;
+  generated: boolean;
+  mime: string;
+  bytes: number;
+  sha256: string;
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
+  /** Where it came from, e.g. "generated:frame-renderer@1", "tts:espeak-ng", "bundled:fonts". */
+  source: string;
+  creatorOrProvider: string;
+  license: string;
+  licenseUrl: string | null;
+  usageRights: string;
+  generationParams: Record<string, unknown> | null;
+  provenance: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export type TtsProviderName = 'espeak' | 'mock';
+
+export interface VoiceProfileDto {
+  id: string;
+  name: string;
+  provider: TtsProviderName;
+  voiceId: string;
+  language: string;
+  rateWpm: number;
+  /** Draft/placeholder voices are flagged by the quality report and are not publishable. */
+  quality: 'draft' | 'mock' | 'production';
+  isDefault: boolean;
+  /** Whether the provider can run on this worker host right now (e.g. eSpeak NG installed). */
+  available: boolean;
+}
+
+/** Output settings. Aspect ratio is always 9:16. */
+export interface RenderSettings {
+  width: number;
+  height: number;
+  fps: 24 | 25 | 30 | 60;
+  codec: 'h264';
+  videoBitrateKbps: number;
+  audioBitrateKbps: number;
+  minDurationSec: number;
+  maxDurationSec: number;
+  burnCaptions: boolean;
+}
+
+export type ProductionStatus = 'queued' | 'rendering' | 'ready' | 'quality_failed' | 'failed' | 'cancelled';
+export type RenderStage = 'queued' | 'narration' | 'frames' | 'compose' | 'quality' | 'done';
+
+export interface VideoProductionDto {
+  id: string;
+  scriptId: string;
+  scriptTitle: string;
+  scriptVersion: number;
+  /** Hash of the approved script version this production renders. */
+  scriptHash: string;
+  voiceProfileId: string;
+  voiceName: string;
+  settings: RenderSettings;
+  status: ProductionStatus;
+  stage: RenderStage;
+  progress: number;
+  error: string | null;
+  cancelRequested: boolean;
+  renderAttempt: number;
+  jobId: string | null;
+  latestVersion: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CaptionCue {
+  startMs: number;
+  endMs: number;
+  text: string;
+  /** Rendered lines after wrapping (validated against the caption safe area). */
+  lines: string[];
+}
+
+export interface VideoSceneDto {
+  index: number;
+  startMs: number;
+  endMs: number;
+  narration: string;
+  onScreenText: string;
+  transition: 'cut' | 'fade' | 'slide' | 'zoom';
+  audioAssetId: string | null;
+  frameAssetIds: string[];
+  captions: CaptionCue[];
+}
+
+export type QualityCheckStatus = 'pass' | 'warn' | 'fail';
+
+export interface QualityCheckDto {
+  id: string;
+  label: string;
+  status: QualityCheckStatus;
+  detail: string;
+  measured: string | null;
+  expected: string | null;
+}
+
+export interface QualityReportDto {
+  id: string;
+  passed: boolean;
+  checks: QualityCheckDto[];
+  failures: string[];
+  createdAt: string;
+}
+
+export interface VideoVersionDto {
+  id: string;
+  version: number;
+  videoAssetId: string;
+  captionsAssetId: string | null;
+  thumbnailAssetId: string | null;
+  width: number;
+  height: number;
+  fps: number;
+  durationMs: number;
+  codec: string;
+  bitrateKbps: number;
+  sha256: string;
+  bytes: number;
+  quality: QualityReportDto | null;
+  createdAt: string;
+}
+
+/** GET /api/video/productions/:id */
+export interface VideoProductionDetailDto extends VideoProductionDto {
+  scenes: VideoSceneDto[];
+  versions: VideoVersionDto[];
+  assets: Array<MediaAssetDto & { role: string; sceneIndex: number | null }>;
+}
+
+/** POST /api/video/productions (owner): script must be approved. Idempotent per (version, settings, voice). */
+export interface CreateProductionRequest {
+  scriptId: string;
+  voiceProfileId?: string;
+  settings?: Partial<RenderSettings>;
+}
+
+export interface CreateProductionResponse {
+  production: VideoProductionDto;
+  job: JobDto | null;
+  /** false when an identical production already existed (no new record, no new job). */
+  created: boolean;
+}
+
+/** GET /api/video/assets/:id/url → short-lived signed URL for <video>/<img> (no Authorization header needed). */
+export interface SignedMediaUrlDto {
+  url: string;
+  expiresAt: string;
+}
+
+/** GET /api/video/status */
+export interface RenderCapabilityDto {
+  ffmpeg: { available: boolean; version: string | null };
+  espeak: { available: boolean; version: string | null };
+  defaults: RenderSettings;
+  concurrency: number;
+}

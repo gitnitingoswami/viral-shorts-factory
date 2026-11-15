@@ -64,6 +64,18 @@ Phase status lives in `docs/PHASE_TRACKER.md`; this file tracks tasks and blocke
 | T03.6 | Live generation with Claude | User (Anthropic credits) | BLOCKED | Key configured and valid; API returns "credit balance is too low" — add credits in console.anthropic.com |
 | T03.7 | Independent review, CI, completion report | Lead Orchestrator + reviewer | DONE | Review ACCEPT (round 3); CI 4/4 on 24e8398 |
 
+## Phase 04 — AI video production
+| ID | Task | Owner | Status | Output |
+|---|---|---|---|---|
+| T04.1 | Tooling: FFmpeg 9, eSpeak NG (local), OFL font assets, resvg frame renderer | Lead Orchestrator (devops role) | DONE | `apps/api/assets/fonts` (OFL.txt) |
+| T04.2 | Data model: voice profiles, media assets (rights NOT NULL), productions, scenes, versions, quality reports | Lead Orchestrator (database-engineer role) | IN_PROGRESS | migration `VideoProduction` |
+| T04.3 | Render pipeline: TTS → audio → frames → FFmpeg → captions → QC, on the `render` queue (leased, cancellable, idempotent) | Lead Orchestrator (backend-engineer role) | IN_PROGRESS | `apps/api/src/video/` |
+| T04.4 | API: productions, cancel/retry, assets, signed media streaming | Lead Orchestrator | TODO | `video.controller.ts` |
+| T04.5 | Angular: production queue, preview, asset library, quality report; F-12 re-run warning | frontend-engineer (subagent) | TODO | `apps/web/src/app/features/video` |
+| T04.6 | Worker image + CI: ffmpeg/espeak-ng, fonts | Lead Orchestrator (devops role) | TODO | Dockerfile, ci.yml |
+| T04.7 | Cloud TTS provider | User (choose provider + credential) | BLOCKED | Draft eSpeak voice until chosen |
+| T04.8 | Independent review, CI, completion report | Lead Orchestrator + reviewer | TODO | |
+
 ## Follow-ups (tracked, non-blocking)
 | ID | Item | Source | Target phase |
 |---|---|---|---|
