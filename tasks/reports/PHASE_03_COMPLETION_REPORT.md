@@ -1,6 +1,6 @@
 # Phase 03 Completion Report: AI Content Strategy and Scripts
 
-**Date:** 2026-11-15 · **Branch:** `phase-03/content-scripts` · **PR:** #4 · **Recommendation:** ACCEPT, with live Claude verification BLOCKED on the user's API key
+**Date:** 2026-11-15 · **Branch:** `phase-03/content-scripts` · **PR:** #4 · **Recommendation:** ACCEPT · live Claude verification BLOCKED on Anthropic credits (F-14)
 
 ## Summary
 Approved trend topics become five distinct content ideas. A selected idea becomes an original 20–60 s script
@@ -46,8 +46,11 @@ content hash, possible only when every gate passes (or is overridden with a reco
 | Review state explicit | PASS | Script status + per-version check states + human reviews with decision/note/approved hash; blockers listed |
 | Tests: prompt failures, malformed outputs, duplicate ideas | PASS | e2e: malformed → failed on attempt 1 with nothing stored; refusal → failed; budget exhausted → failed; duplicates flagged; unit tests for SDK error mapping, truncation, schema violations |
 
+## Git / CI
+PR #4: `7ae7436` feature, `ef63a0e` CI timeout fix, `d3da0e8` review fixes, `24e8398` round-2 fixes. GitHub CI 4/4 green on `d3da0e8` and `24e8398`. Review round 3: ACCEPT.
+
 ## Tests and quality
-- API: 109 unit + 66 integration tests pass. The integration tests use the real Docker sandbox, covering a thrown error, a network attempt, an infinite-loop timeout and a non-executable language.
+- API: 109 unit + 68 integration tests pass. The integration tests use the real Docker sandbox, covering a thrown error, a network attempt, an infinite-loop timeout and a non-executable language.
 - Combined coverage: 94% of lines.
 - Web: 143 tests pass.
 - Lint, strict typecheck and builds are clean. gitleaks finds no leaks.
